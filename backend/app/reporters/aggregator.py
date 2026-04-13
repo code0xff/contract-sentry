@@ -6,11 +6,13 @@ from collections import defaultdict
 from app.schemas.enums import SEVERITY_ORDER, Severity
 from app.schemas.finding import FindingCreate
 
+MAX_EVIDENCE_PER_FINDING = 20
+
 
 def aggregate_findings(findings: list[FindingCreate]) -> list[FindingCreate]:
     """Deduplicate findings by (vulnerability_type, location) keeping the
-    highest severity, highest confidence and merging evidence payloads.
-    Tool attribution is preserved via evidence.
+    highest severity, confidence boosted by number of distinct confirming tools,
+    and evidence capped at MAX_EVIDENCE_PER_FINDING entries.
     """
     if not findings:
         return []
@@ -22,24 +24,25 @@ def aggregate_findings(findings: list[FindingCreate]) -> list[FindingCreate]:
     for f in findings:
         key = (f.vulnerability_type.value, f.location)
         tool_bucket[key].add(f.tool.value)
-        evidence_bucket[key].extend(f.evidence)
+        # Cap evidence accumulation to avoid unbounded DB row growth
+        evidence_bucket[key] = (evidence_bucket[key] + f.evidence)[:MAX_EVIDENCE_PER_FINDING]
 
         if key not in bucket:
             bucket[key] = f
             continue
 
         current = bucket[key]
-        # pick higher severity
+        # Promote to higher severity if this finding is more severe
         if SEVERITY_ORDER[f.severity] > SEVERITY_ORDER[current.severity]:
             bucket[key] = f.model_copy()
-        # bump confidence if additional tool confirms
-        bucket[key] = bucket[key].model_copy(
-            update={"confidence": min(1.0, max(current.confidence, f.confidence) + 0.1)}
-        )
 
     out: list[FindingCreate] = []
     for key, base in bucket.items():
-        merged = base.model_copy(update={"evidence": evidence_bucket[key]})
+        # Confidence boost based on number of distinct tools that confirmed this finding,
+        # not cumulative duplicate count — prevents inflation from repeated detections.
+        n_distinct = len(tool_bucket[key])
+        boosted = min(1.0, base.confidence + 0.1 * max(0, n_distinct - 1))
+        merged = base.model_copy(update={"evidence": evidence_bucket[key], "confidence": boosted})
         out.append(merged)
     # sort by severity desc
     out.sort(key=lambda x: -SEVERITY_ORDER[x.severity])

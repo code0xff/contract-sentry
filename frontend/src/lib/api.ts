@@ -1,4 +1,4 @@
-import type { Contract, Finding, Job, Report, Simulation } from '@/types';
+import type { Contract, Finding, Job, Report, Simulation } from '@/types/index';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -26,6 +26,9 @@ export const createContract = (payload: {
 export const listContracts = () => request<Contract[]>('/api/v1/contracts');
 
 export const getContract = (id: string) => request<Contract>(`/api/v1/contracts/${id}`);
+
+export const listContractJobs = (contractId: string) =>
+  request<Job[]>(`/api/v1/contracts/${contractId}/jobs`);
 
 // Jobs
 export const analyzeContract = (contractId: string, tools?: string[]) =>

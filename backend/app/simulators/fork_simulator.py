@@ -1,7 +1,10 @@
 """Fork-based simulator using Foundry `forge test --fork-url`."""
 from __future__ import annotations
 
+import ipaddress
+import socket
 import tempfile
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +12,39 @@ from app.config import get_settings
 from app.core.sandbox import SandboxError, run_sandboxed
 from app.schemas.enums import SimulationStatus, VulnerabilityType
 from app.simulators.base import BaseSimulator, template_for
+
+# Ports commonly used by Ethereum RPC endpoints
+_ALLOWED_RPC_PORTS = {80, 443, 8545, 8546, 9545}
+
+
+def _is_safe_rpc_url(url: str) -> bool:
+    """Return True only if the URL resolves to a public (non-internal) address.
+
+    Guards against SSRF: rejects loopback, private, link-local, multicast,
+    and unspecified addresses so `forge` cannot be weaponised to probe the
+    internal network or cloud metadata endpoints.
+    """
+    try:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        host = parsed.hostname
+        if not host:
+            return False
+        port = parsed.port
+        if port is not None and port not in _ALLOWED_RPC_PORTS:
+            return False
+        ip_str = socket.gethostbyname(host)
+        ip = ipaddress.ip_address(ip_str)
+        return not (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_unspecified
+        )
+    except (socket.gaierror, ValueError, OSError):
+        return False
 
 
 class ForkSimulator(BaseSimulator):
@@ -31,10 +67,10 @@ class ForkSimulator(BaseSimulator):
                 "output": "fork_rpc_url is required",
                 "trace": None,
             }
-        if not (fork_rpc_url.startswith("http://") or fork_rpc_url.startswith("https://")):
+        if not _is_safe_rpc_url(fork_rpc_url):
             return {
                 "status": SimulationStatus.FAILED,
-                "output": "fork_rpc_url must be http(s)",
+                "output": "fork_rpc_url is not allowed: must be a public http(s) Ethereum RPC endpoint",
                 "trace": None,
             }
 

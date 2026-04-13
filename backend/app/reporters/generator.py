@@ -1,11 +1,12 @@
 """Report generator: JSON/Markdown/HTML renderers."""
 from __future__ import annotations
 
+import html as html_module
 from collections import Counter
 from typing import Any
 
 from app.models.domain import Finding, Job
-from app.schemas.enums import Severity
+from app.schemas.enums import SEVERITY_ORDER, Severity
 
 REMEDIATION = {
     "reentrancy": "Use checks-effects-interactions and `ReentrancyGuard` from OpenZeppelin.",
@@ -20,6 +21,9 @@ REMEDIATION = {
     "flash_loan": "Use oracles with TWAP and enforce invariants on flash-loan attack vectors.",
     "other": "Review manually; apply defense-in-depth.",
 }
+
+# Severity display order (highest to lowest)
+_SEVERITY_DISPLAY_ORDER = sorted(Severity, key=lambda s: -SEVERITY_ORDER[s])
 
 
 class ReportGenerator:
@@ -38,8 +42,8 @@ class ReportGenerator:
         lines.append(f"**Total findings**: {summary['total']}")
         lines.append("")
         lines.append("## Severity breakdown")
-        for sev in ("critical", "high", "medium", "low", "info"):
-            lines.append(f"- {sev}: {summary['by_severity'].get(sev, 0)}")
+        for sev in _SEVERITY_DISPLAY_ORDER:
+            lines.append(f"- {sev.value}: {summary['by_severity'].get(sev.value, 0)}")
         lines.append("")
         lines.append("## Findings")
         for i, f in enumerate(findings, start=1):
@@ -60,9 +64,13 @@ class ReportGenerator:
 
     def to_html(self, job: Job, findings: list[Finding]) -> str:
         md = self.to_markdown(job, findings)
-        # Minimal HTML (escape-free for controlled data)
-        body = md.replace("\n", "<br/>\n")
-        return f"<!doctype html><html><head><meta charset='utf-8'><title>Report {job.id}</title></head><body><pre>{body}</pre></body></html>"
+        # Escape all content — findings may contain attacker-controlled strings
+        body = html_module.escape(md).replace("\n", "<br/>\n")
+        return (
+            f"<!doctype html><html><head><meta charset='utf-8'>"
+            f"<title>Report {html_module.escape(job.id)}</title></head>"
+            f"<body><pre>{body}</pre></body></html>"
+        )
 
     def to_json(self, job: Job, findings: list[Finding]) -> dict[str, Any]:
         return {
@@ -88,6 +96,4 @@ class ReportGenerator:
 
 
 def _composite(findings: list[Finding]) -> Severity:
-    from app.schemas.enums import SEVERITY_ORDER
-
     return max(findings, key=lambda f: SEVERITY_ORDER[f.severity]).severity

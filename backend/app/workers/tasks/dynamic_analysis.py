@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 
 from app.analyzers.echidna_analyzer import EchidnaAnalyzer
 from app.core.logging import get_logger
@@ -15,36 +16,53 @@ log = get_logger(__name__)
 
 
 async def _run(job_id: str, contract_id: str) -> None:
+    # Capture source inside the session block to avoid detached-instance access
+    source: str = ""
     async with session_scope() as session:
         job = await session.get(Job, job_id)
         contract = await session.get(Contract, contract_id)
         if job is None or contract is None:
             return
         job.status = JobStatus.RUNNING
+        source = contract.source or ""
 
-    findings = EchidnaAnalyzer().analyze(contract.source or "")
-    aggregated = aggregate_findings(findings)
+    try:
+        findings = EchidnaAnalyzer().analyze(source)
+        aggregated = aggregate_findings(findings)
 
-    async with session_scope() as session:
-        job = await session.get(Job, job_id)
-        assert job is not None
-        for fc in aggregated:
-            finding = Finding(
-                job_id=job.id,
-                tool=fc.tool,
-                vulnerability_type=fc.vulnerability_type,
-                severity=fc.severity,
-                title=fc.title,
-                description=fc.description,
-                location=fc.location,
-                confidence=fc.confidence,
-            )
-            session.add(finding)
-            await session.flush()
-            for ev in fc.evidence:
-                session.add(Evidence(finding_id=finding.id, kind=ev.get("kind", "raw_output"), payload=ev))
-        job.status = JobStatus.COMPLETED
-        job.progress = 100
+        async with session_scope() as session:
+            job = await session.get(Job, job_id)
+            if job is None:
+                log.error("job_disappeared", job_id=job_id)
+                return
+            for fc in aggregated:
+                finding = Finding(
+                    job_id=job.id,
+                    tool=fc.tool,
+                    vulnerability_type=fc.vulnerability_type,
+                    severity=fc.severity,
+                    title=fc.title,
+                    description=fc.description,
+                    location=fc.location,
+                    confidence=fc.confidence,
+                )
+                session.add(finding)
+                await session.flush()
+                for ev in fc.evidence:
+                    session.add(Evidence(finding_id=finding.id, kind=ev.get("kind", "raw_output"), payload=ev))
+            job.status = JobStatus.COMPLETED
+            job.progress = 100
+            job.finished_at = datetime.now(tz=timezone.utc)
+
+    except Exception as exc:
+        log.error("dynamic_analysis_orchestrator_failed", job_id=job_id, error=str(exc))
+        async with session_scope() as session:
+            job = await session.get(Job, job_id)
+            if job is not None:
+                job.status = JobStatus.FAILED
+                job.error = str(exc)
+                job.finished_at = datetime.now(tz=timezone.utc)
+        raise
 
 
 @celery_app.task(

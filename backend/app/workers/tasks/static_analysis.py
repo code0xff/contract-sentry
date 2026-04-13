@@ -20,6 +20,8 @@ log = get_logger(__name__)
 async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
     from app.models.domain import Contract  # local import for tests
 
+    # Capture source inside the session block to avoid detached-instance access
+    source: str = ""
     async with session_scope() as session:
         job = await session.get(Job, job_id)
         contract = await session.get(Contract, contract_id)
@@ -32,50 +34,64 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
             return
         job.status = JobStatus.RUNNING
         job.started_at = datetime.now(tz=timezone.utc)
+        source = contract.source or contract.bytecode or ""
 
-    collected_findings = []
-    for tool in tools:
-        try:
-            if tool == ToolName.SLITHER.value:
-                findings = SlitherAnalyzer().analyze(contract.source or contract.bytecode or "")
-            elif tool == ToolName.MYTHRIL.value:
-                findings = MythrilAnalyzer().analyze(contract.source or contract.bytecode or "")
-            elif tool == ToolName.ECHIDNA.value:
-                from app.analyzers.echidna_analyzer import EchidnaAnalyzer
+    try:
+        collected_findings = []
+        for tool in tools:
+            try:
+                if tool == ToolName.SLITHER.value:
+                    findings = SlitherAnalyzer().analyze(source)
+                elif tool == ToolName.MYTHRIL.value:
+                    findings = MythrilAnalyzer().analyze(source)
+                elif tool == ToolName.ECHIDNA.value:
+                    from app.analyzers.echidna_analyzer import EchidnaAnalyzer
 
-                findings = EchidnaAnalyzer().analyze(contract.source or "")
-            else:
-                findings = []
-            JOB_TOTAL.labels(tool=tool, status="ok").inc()
-            collected_findings.extend(findings)
-        except Exception as exc:
-            log.error("tool_failed", tool=tool, error=str(exc))
-            TOOL_FAILURE.labels(tool=tool, reason=type(exc).__name__).inc()
+                    findings = EchidnaAnalyzer().analyze(source)
+                else:
+                    findings = []
+                JOB_TOTAL.labels(tool=tool, status="ok").inc()
+                collected_findings.extend(findings)
+            except Exception as exc:
+                log.error("tool_failed", tool=tool, error=str(exc))
+                TOOL_FAILURE.labels(tool=tool, reason=type(exc).__name__).inc()
 
-    # dedup + persist
-    aggregated = aggregate_findings(collected_findings)
+        # dedup + persist
+        aggregated = aggregate_findings(collected_findings)
 
-    async with session_scope() as session:
-        job = await session.get(Job, job_id)
-        assert job is not None
-        for fc in aggregated:
-            finding = Finding(
-                job_id=job.id,
-                tool=fc.tool,
-                vulnerability_type=fc.vulnerability_type,
-                severity=fc.severity,
-                title=fc.title,
-                description=fc.description,
-                location=fc.location,
-                confidence=fc.confidence,
-            )
-            session.add(finding)
-            await session.flush()
-            for ev in fc.evidence:
-                session.add(Evidence(finding_id=finding.id, kind=ev.get("kind", "raw_output"), payload=ev))
-        job.status = JobStatus.COMPLETED
-        job.progress = 100
-        job.finished_at = datetime.now(tz=timezone.utc)
+        async with session_scope() as session:
+            job = await session.get(Job, job_id)
+            if job is None:
+                log.error("job_disappeared", job_id=job_id)
+                return
+            for fc in aggregated:
+                finding = Finding(
+                    job_id=job.id,
+                    tool=fc.tool,
+                    vulnerability_type=fc.vulnerability_type,
+                    severity=fc.severity,
+                    title=fc.title,
+                    description=fc.description,
+                    location=fc.location,
+                    confidence=fc.confidence,
+                )
+                session.add(finding)
+                await session.flush()
+                for ev in fc.evidence:
+                    session.add(Evidence(finding_id=finding.id, kind=ev.get("kind", "raw_output"), payload=ev))
+            job.status = JobStatus.COMPLETED
+            job.progress = 100
+            job.finished_at = datetime.now(tz=timezone.utc)
+
+    except Exception as exc:
+        log.error("analysis_orchestrator_failed", job_id=job_id, error=str(exc))
+        async with session_scope() as session:
+            job = await session.get(Job, job_id)
+            if job is not None:
+                job.status = JobStatus.FAILED
+                job.error = str(exc)
+                job.finished_at = datetime.now(tz=timezone.utc)
+        raise
 
     # Trigger report generation
     try:

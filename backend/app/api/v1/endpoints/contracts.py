@@ -46,6 +46,17 @@ async def get_contract(contract_id: str, session: AsyncSession = Depends(get_ses
     return contract
 
 
+@router.get("/{contract_id}/jobs", response_model=list[JobOut])
+async def list_contract_jobs(contract_id: str, session: AsyncSession = Depends(get_session)) -> list[Job]:
+    contract = await session.get(Contract, contract_id)
+    if contract is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "contract not found")
+    result = await session.execute(
+        select(Job).where(Job.contract_id == contract_id).order_by(Job.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 @router.post("/{contract_id}/analyze", response_model=JobOut, status_code=status.HTTP_202_ACCEPTED)
 async def analyze_contract(
     contract_id: str,

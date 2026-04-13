@@ -4,6 +4,19 @@ export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export type SimulationStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'timed_out';
 export type ReportStatus = 'draft' | 'ready';
 
+export type VulnerabilityType =
+  | 'reentrancy'
+  | 'integer_overflow'
+  | 'access_control'
+  | 'unchecked_return'
+  | 'timestamp_dependency'
+  | 'delegatecall'
+  | 'self_destruct'
+  | 'front_running'
+  | 'denial_of_service'
+  | 'flash_loan'
+  | 'other';
+
 export interface Contract {
   id: string;
   name: string;
