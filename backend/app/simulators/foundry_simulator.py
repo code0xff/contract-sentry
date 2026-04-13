@@ -10,6 +10,33 @@ from app.core.sandbox import SandboxError, run_sandboxed
 from app.schemas.enums import SimulationStatus, VulnerabilityType
 from app.simulators.base import BaseSimulator, template_for
 
+DEFI_TEMPLATES: dict[str, dict[str, str]] = {
+    "flash_loan": {
+        "description": "Flash loan attack simulation",
+        "scaffold": "// Flash loan attack: borrow large amount, manipulate state, repay",
+    },
+    "price_oracle_manipulation": {
+        "description": "Price oracle manipulation via large swap",
+        "scaffold": "// Oracle manipulation: large swap to distort TWAP/spot price",
+    },
+    "reentrancy": {
+        "description": "Reentrancy exploit via malicious fallback",
+        "scaffold": "// Reentrancy: reenter victim during ETH transfer",
+    },
+    "access_control": {
+        "description": "Unauthorized call to privileged function",
+        "scaffold": "// Access control: call admin function without privilege check",
+    },
+    "integer_overflow": {
+        "description": "Integer overflow/underflow exploit",
+        "scaffold": "// Overflow: trigger arithmetic overflow in unchecked block",
+    },
+    "front_running": {
+        "description": "Front-running via transaction ordering",
+        "scaffold": "// Front-run: observe pending tx, submit higher gas tx to beat it",
+    },
+}
+
 
 class FoundrySimulator(BaseSimulator):
     def __init__(self, binary: str | None = None, timeout: int | None = None) -> None:

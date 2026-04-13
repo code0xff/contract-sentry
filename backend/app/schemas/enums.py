@@ -38,6 +38,7 @@ class ToolName(str, Enum):
     SLITHER = "slither"
     MYTHRIL = "mythril"
     ECHIDNA = "echidna"
+    MEDUSA = "medusa"
     FOUNDRY = "foundry"
     INTERNAL = "internal"
 

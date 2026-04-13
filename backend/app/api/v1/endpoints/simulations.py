@@ -6,9 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
 from app.models.domain import SimulationRun
 from app.schemas.simulation import SimulationOut
+from app.simulators.foundry_simulator import DEFI_TEMPLATES
 from app.workers.dispatcher import dispatch_simulation
 
 router = APIRouter()
+
+
+@router.get("/templates")
+async def list_templates() -> list[dict[str, str]]:
+    return [{"name": name, "description": tpl["description"]} for name, tpl in DEFI_TEMPLATES.items()]
 
 
 @router.get("/{simulation_id}", response_model=SimulationOut)
