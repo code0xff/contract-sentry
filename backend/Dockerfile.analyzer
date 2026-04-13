@@ -1,0 +1,18 @@
+# Analyzer sandbox image with Slither + Mythril pre-installed.
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH=/home/sandbox/.local/bin:$PATH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git build-essential curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 1000 sandbox
+USER sandbox
+WORKDIR /home/sandbox
+
+RUN pip install --user --no-cache-dir slither-analyzer mythril
+
+WORKDIR /tmp/analysis

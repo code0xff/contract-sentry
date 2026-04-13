@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"~/.local/bin/ruff check app/ tests/ 2>&1\",\"description\":\"Run ruff lint check\"}",
+  "error": "Exit code 1\nB008 Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable\n  --> app/api/v1/endpoints/contracts.py:20:29\n   |\n18 | async def create_contract(\n19 |     payload: ContractCreate,\n20 |     session: AsyncSession = Depends(get_session),\n   |                             ^^^^^^^^^^^^^^^^^^^^\n21 | ) -> Contract:\n22 |     contract = Contract(\n   |\n\nB008 Do not perform function call ...",
+  "timestamp": "2026-04-13T14:40:20.642Z",
+  "retry_count": 2
+}

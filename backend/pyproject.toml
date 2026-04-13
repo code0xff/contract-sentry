@@ -1,0 +1,22 @@
+[project]
+name = "contract-centry"
+version = "0.1.0"
+description = "EVM smart contract security testing platform"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "W"]
+ignore = [
+    "E501",
+    "B008",  # FastAPI: Depends() in function argument defaults is idiomatic
+    "B904",  # Celery: raise self.retry(exc=exc) is idiomatic
+]

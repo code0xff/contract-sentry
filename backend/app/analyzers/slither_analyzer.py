@@ -1,0 +1,115 @@
+"""Slither analyzer adapter.
+
+Writes the source to a temporary file, invokes `slither <file> --json -`,
+parses the JSON output and normalizes detectors into ``FindingCreate``.
+"""
+from __future__ import annotations
+
+import json
+import tempfile
+from pathlib import Path
+from typing import Any
+
+from app.analyzers.base import AnalyzerError, BaseAnalyzer
+from app.config import get_settings
+from app.core.sandbox import SandboxError, run_sandboxed
+from app.schemas.enums import Severity, ToolName, VulnerabilityType
+from app.schemas.finding import FindingCreate
+
+SLITHER_SEVERITY_MAP = {
+    "High": Severity.HIGH,
+    "Medium": Severity.MEDIUM,
+    "Low": Severity.LOW,
+    "Informational": Severity.INFO,
+    "Optimization": Severity.INFO,
+}
+
+SLITHER_CHECK_MAP = {
+    "reentrancy-eth": VulnerabilityType.REENTRANCY,
+    "reentrancy-no-eth": VulnerabilityType.REENTRANCY,
+    "reentrancy-events": VulnerabilityType.REENTRANCY,
+    "tx-origin": VulnerabilityType.ACCESS_CONTROL,
+    "arbitrary-send": VulnerabilityType.ACCESS_CONTROL,
+    "unchecked-transfer": VulnerabilityType.UNCHECKED_RETURN,
+    "unchecked-send": VulnerabilityType.UNCHECKED_RETURN,
+    "unchecked-lowlevel": VulnerabilityType.UNCHECKED_RETURN,
+    "timestamp": VulnerabilityType.TIMESTAMP_DEPENDENCY,
+    "block-timestamp": VulnerabilityType.TIMESTAMP_DEPENDENCY,
+    "delegatecall-loop": VulnerabilityType.DELEGATECALL,
+    "controlled-delegatecall": VulnerabilityType.DELEGATECALL,
+    "suicidal": VulnerabilityType.SELF_DESTRUCT,
+    "integer-overflow": VulnerabilityType.INTEGER_OVERFLOW,
+}
+
+
+class SlitherAnalyzer(BaseAnalyzer):
+    tool_name = "slither"
+
+    def __init__(self, binary: str | None = None, timeout: int | None = None) -> None:
+        settings = get_settings()
+        self.binary = binary or settings.slither_bin
+        self.timeout = timeout or settings.static_analysis_timeout_s
+
+    def analyze(self, source: str) -> list[FindingCreate]:
+        if not source:
+            return []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src_path = Path(tmpdir) / "Contract.sol"
+            src_path.write_text(source, encoding="utf-8")
+
+            try:
+                result = run_sandboxed(
+                    [self.binary, str(src_path), "--json", "-"],
+                    timeout=self.timeout,
+                )
+            except SandboxError as exc:
+                raise AnalyzerError(f"slither not available: {exc}") from exc
+
+            if result.timed_out:
+                raise AnalyzerError(f"slither timed out after {self.timeout}s")
+
+            if not result.stdout.strip():
+                # slither returns non-zero on findings; inspect stderr
+                if result.returncode != 0:
+                    raise AnalyzerError(f"slither failed: {result.stderr[:500]}")
+                return []
+
+            try:
+                data = json.loads(result.stdout)
+            except json.JSONDecodeError as exc:
+                raise AnalyzerError(f"slither emitted invalid JSON: {exc}") from exc
+
+            return self._normalize(data)
+
+    def _normalize(self, data: dict[str, Any]) -> list[FindingCreate]:
+        out: list[FindingCreate] = []
+        results = data.get("results", {}).get("detectors", []) if isinstance(data, dict) else []
+        for det in results:
+            severity = SLITHER_SEVERITY_MAP.get(det.get("impact", "Informational"), Severity.INFO)
+            vuln_type = SLITHER_CHECK_MAP.get(det.get("check", ""), VulnerabilityType.OTHER)
+            elements = det.get("elements", [])
+            location = None
+            if elements:
+                src = elements[0].get("source_mapping", {})
+                filename = src.get("filename_short") or src.get("filename_absolute") or ""
+                lines = src.get("lines") or []
+                if filename and lines:
+                    location = f"{filename}:{lines[0]}"
+            out.append(
+                FindingCreate(
+                    tool=ToolName.SLITHER,
+                    vulnerability_type=vuln_type,
+                    severity=severity,
+                    title=det.get("check", "slither finding"),
+                    description=det.get("description", ""),
+                    location=location,
+                    confidence=_confidence(det.get("confidence", "Medium")),
+                    evidence=[{"kind": "raw_output", "tool": "slither", "detector": det}],
+                )
+            )
+        return out
+
+
+def _confidence(value: str) -> float:
+    return {"High": 0.9, "Medium": 0.6, "Low": 0.3}.get(value, 0.5)

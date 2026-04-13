@@ -1,0 +1,7 @@
+# Fuzzer sandbox image with Echidna.
+FROM ghcr.io/crytic/echidna/echidna:latest
+
+USER 1000:1000
+WORKDIR /tmp/analysis
+
+ENTRYPOINT ["echidna-test"]
