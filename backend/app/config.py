@@ -51,9 +51,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     ALGORITHM: str = "HS256"
 
-    # LLM / PoC generation
-    ANTHROPIC_API_KEY: str | None = None
-    POC_MODEL: str = "claude-haiku-4-5-20251001"
+    # LLM / PoC generation (via Claude CLI)
+    claude_bin: str = "claude"
 
     # Fork
     fork_rpc_url: str | None = None

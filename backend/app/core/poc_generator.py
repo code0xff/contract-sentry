@@ -1,7 +1,9 @@
-"""LLM-based PoC generation for smart contract vulnerabilities."""
+"""LLM-based PoC generation via Claude CLI subprocess."""
 from __future__ import annotations
 
+import asyncio
 import logging
+import shutil
 
 from app.config import settings
 from app.schemas.finding import FindingOut
@@ -26,31 +28,44 @@ Return ONLY the Solidity code, no explanations outside the code."""
 
 
 async def generate_poc(finding: FindingOut) -> str:
-    """Generate PoC exploit code using Claude. Returns code string or error message."""
-    if not settings.ANTHROPIC_API_KEY:
+    """Generate PoC exploit code by invoking the Claude CLI.
+
+    Calls: claude -p "<prompt>"
+    Returns the CLI stdout as the PoC code string.
+    Falls back to a comment stub if the CLI is not installed or fails.
+    """
+    if not shutil.which(settings.claude_bin):
         return (
-            "// PoC generation requires ANTHROPIC_API_KEY to be configured.\n"
+            f"// PoC generation requires the Claude CLI ('{settings.claude_bin}') to be installed.\n"
             f"// Finding: {finding.title} ({finding.vulnerability_type})\n"
-            "// Set ANTHROPIC_API_KEY environment variable to enable AI-generated PoCs.\n"
+            "// Install Claude CLI and ensure it is on PATH to enable AI-generated PoCs.\n"
         )
+
+    prompt = POC_PROMPT_TEMPLATE.format(
+        title=finding.title,
+        vuln_type=finding.vulnerability_type,
+        severity=finding.severity,
+        description=finding.description,
+        location=finding.location or "unknown",
+    )
+
     try:
-        import anthropic
-        client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-        message = await client.messages.create(
-            model=settings.POC_MODEL,
-            max_tokens=1024,
-            messages=[{
-                "role": "user",
-                "content": POC_PROMPT_TEMPLATE.format(
-                    title=finding.title,
-                    vuln_type=finding.vulnerability_type,
-                    severity=finding.severity,
-                    description=finding.description,
-                    location=finding.location or "unknown",
-                ),
-            }],
+        proc = await asyncio.create_subprocess_exec(
+            settings.claude_bin,
+            "-p",
+            prompt,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        return message.content[0].text
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        if proc.returncode != 0:
+            err = stderr.decode(errors="replace").strip()
+            logger.warning("claude cli exited %d: %s", proc.returncode, err)
+            return f"// PoC generation failed (exit {proc.returncode}).\n// {err[:200]}\n"
+        return stdout.decode(errors="replace").strip()
+    except TimeoutError:
+        logger.warning("claude cli timed out for finding %s", finding.id)
+        return f"// PoC generation timed out for: {finding.title}\n"
     except Exception:
-        logger.warning("PoC generation failed", exc_info=True)
+        logger.warning("PoC generation error", exc_info=True)
         return f"// PoC generation failed for: {finding.title}\n// Check logs for details.\n"
