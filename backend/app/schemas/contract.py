@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.enums import ContractLanguage
+
+_BYTECODE_RE = re.compile(r"^0x[0-9a-fA-F]+$")
 
 
 class ContractCreate(BaseModel):
@@ -20,8 +23,11 @@ class ContractCreate(BaseModel):
             raise ValueError("either source or bytecode must be provided")
         if self.language == ContractLanguage.BYTECODE and not self.bytecode:
             raise ValueError("bytecode language requires bytecode payload")
-        if self.bytecode and not self.bytecode.startswith("0x"):
-            raise ValueError("bytecode must start with 0x")
+        if self.bytecode:
+            if not _BYTECODE_RE.fullmatch(self.bytecode):
+                raise ValueError("bytecode must be a valid hex string: 0x followed by hex characters only")
+            if (len(self.bytecode) - 2) % 2 != 0:
+                raise ValueError("bytecode hex string must have an even number of hex digits")
         return self
 
 
