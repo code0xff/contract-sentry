@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { createSimulation, getFindings, getJob } from '@/lib/api';
+import { createSimulation, generatePoc, getFindings, getJob } from '@/lib/api';
 import type { Finding, Job } from '@/types';
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -35,6 +35,9 @@ export default function JobPage() {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [loading, setLoading] = useState(true);
   const [simLoading, setSimLoading] = useState<string | null>(null);
+  const [pocLoading, setPocLoading] = useState<string | null>(null);
+  const [pocCode, setPocCode] = useState<Record<string, string>>({});
+  const [baselineInput, setBaselineInput] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const loadJob = useCallback(async () => {
@@ -72,6 +75,18 @@ export default function JobPage() {
       alert(err instanceof Error ? err.message : 'Simulation failed');
     } finally {
       setSimLoading(null);
+    }
+  }
+
+  async function runGeneratePoc(finding: Finding) {
+    setPocLoading(finding.id);
+    try {
+      const result = await generatePoc(id, finding.id);
+      setPocCode(prev => ({ ...prev, [finding.id]: result.poc }));
+    } catch (err: unknown) {
+      setPocCode(prev => ({ ...prev, [finding.id]: `// Error: ${err instanceof Error ? err.message : 'Unknown error'}` }));
+    } finally {
+      setPocLoading(null);
     }
   }
 
@@ -130,21 +145,59 @@ export default function JobPage() {
                   {' '}
                   <strong style={{ fontSize: '1rem' }}>{f.title}</strong>
                 </div>
-                <button
-                  onClick={() => runSimulation(f)}
-                  disabled={simLoading === f.id}
-                  style={{ padding: '0.35rem 0.9rem', background: simLoading === f.id ? '#aaa' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: '0.8rem' }}
-                >
-                  {simLoading === f.id ? 'Queuing…' : 'Simulate Exploit'}
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => runGeneratePoc(f)}
+                    disabled={pocLoading === f.id}
+                    style={{ padding: '0.35rem 0.9rem', background: pocLoading === f.id ? '#aaa' : '#0891b2', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: '0.8rem' }}
+                  >
+                    {pocLoading === f.id ? 'Generating…' : 'Generate PoC'}
+                  </button>
+                  <button
+                    onClick={() => runSimulation(f)}
+                    disabled={simLoading === f.id}
+                    style={{ padding: '0.35rem 0.9rem', background: simLoading === f.id ? '#aaa' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: '0.8rem' }}
+                  >
+                    {simLoading === f.id ? 'Queuing…' : 'Simulate Exploit'}
+                  </button>
+                </div>
               </div>
               <div style={{ fontSize: '0.8rem', color: '#555', marginTop: 4 }}>
                 Tool: {f.tool} | Type: {f.vulnerability_type} | Confidence: {Math.round(f.confidence * 100)}%
                 {f.location && ` | ${f.location}`}
               </div>
               <p style={{ margin: '0.5rem 0 0', fontSize: '0.9rem' }}>{f.description}</p>
+              {pocCode[f.id] && (
+                <pre style={{
+                  marginTop: '0.75rem', background: '#1e293b', color: '#e2e8f0',
+                  padding: '1rem', borderRadius: 6, fontSize: '0.78rem',
+                  overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                }}>
+                  {pocCode[f.id]}
+                </pre>
+              )}
             </div>
           ))}
+
+          <div style={{ ...CARD, marginTop: '1.5rem' }}>
+            <h3 style={{ margin: '0 0 0.75rem' }}>Compare with baseline</h3>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                placeholder="Baseline job ID"
+                value={baselineInput}
+                onChange={e => setBaselineInput(e.target.value)}
+                style={{ flex: 1, minWidth: 200, padding: '0.4rem 0.75rem', border: '1px solid #d1d5db', borderRadius: 5, fontSize: '0.9rem' }}
+              />
+              <button
+                onClick={() => { if (baselineInput.trim()) router.push(`/jobs/${id}/diff?baseline=${encodeURIComponent(baselineInput.trim())}`); }}
+                disabled={!baselineInput.trim()}
+                style={{ padding: '0.4rem 1rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem' }}
+              >
+                Compare
+              </button>
+            </div>
+          </div>
         </>
       )}
     </div>

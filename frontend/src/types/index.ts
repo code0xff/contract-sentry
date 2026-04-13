@@ -82,3 +82,10 @@ export interface Simulation {
   created_at: string;
   finished_at: string | null;
 }
+
+export interface FindingDiff {
+  new: Finding[];
+  fixed: Finding[];
+  persisting: Finding[];
+  summary: { new: number; fixed: number; persisting: number };
+}

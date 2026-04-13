@@ -1,4 +1,4 @@
-import type { Contract, Finding, Job, Report, Simulation } from '@/types/index';
+import type { Contract, Finding, FindingDiff, Job, Report, Simulation } from '@/types/index';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -64,6 +64,12 @@ export const getReportHtml = async (reportId: string): Promise<string> => {
   if (!res.ok) throw new Error(res.statusText);
   return res.text();
 };
+
+export const diffFindings = (jobId: string, baselineJobId: string) =>
+  request<FindingDiff>(`/api/v1/jobs/${jobId}/diff?baseline=${baselineJobId}`);
+
+export const generatePoc = (jobId: string, findingId: string) =>
+  request<{ poc: string }>(`/api/v1/jobs/${jobId}/findings/${findingId}/poc`, { method: 'POST' });
 
 // Simulations
 export const getSimulation = (simId: string) => request<Simulation>(`/api/v1/simulations/${simId}`);

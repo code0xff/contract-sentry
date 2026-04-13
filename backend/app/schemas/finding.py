@@ -41,3 +41,10 @@ class FindingOut(BaseModel):
     confidence: float
     created_at: datetime
     evidences: list[EvidenceOut] = []
+
+
+class FindingDiff(BaseModel):
+    new: list[FindingOut]        # in job_b but not job_a
+    fixed: list[FindingOut]      # in job_a but not job_b
+    persisting: list[FindingOut] # in both
+    summary: dict[str, int]      # {"new": N, "fixed": N, "persisting": N}
