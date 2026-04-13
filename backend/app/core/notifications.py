@@ -29,7 +29,8 @@ async def send_job_notification(
     async with httpx.AsyncClient(timeout=5) as client:
         if settings.webhook_url:
             try:
-                await client.post(settings.webhook_url, json=payload)
+                resp = await client.post(settings.webhook_url, json=payload)
+                resp.raise_for_status()
             except Exception:
                 logger.warning("webhook delivery failed", exc_info=True)
 
@@ -53,6 +54,7 @@ async def send_job_notification(
                 ],
             }
             try:
-                await client.post(settings.slack_webhook_url, json=slack_payload)
+                resp = await client.post(settings.slack_webhook_url, json=slack_payload)
+                resp.raise_for_status()
             except Exception:
                 logger.warning("slack notification failed", exc_info=True)

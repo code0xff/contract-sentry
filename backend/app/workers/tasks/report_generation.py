@@ -19,6 +19,9 @@ log = get_logger(__name__)
 
 
 async def _run(job_id: str) -> None:
+    findings_count = 0
+    report_id: str | None = None
+
     async with session_scope() as session:
         job = await session.get(Job, job_id)
         if job is None:
@@ -45,12 +48,15 @@ async def _run(job_id: str) -> None:
         report.html = gen.to_html(job, findings)
         report.status = ReportStatus.READY
 
-        await send_job_notification(
-            job_id=job_id,
-            status="completed",
-            findings_count=len(findings),
-            report_id=report.id,
-        )
+        findings_count = len(findings)
+        report_id = report.id
+    # session committed — now safe to send external notification
+    await send_job_notification(
+        job_id=job_id,
+        status="completed",
+        findings_count=findings_count,
+        report_id=report_id,
+    )
 
 
 @celery_app.task(

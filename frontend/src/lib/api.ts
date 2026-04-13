@@ -2,9 +2,15 @@ import type { Contract, Finding, FindingDiff, Job, Report, Simulation } from '@/
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
+function authHeader(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: { 'Content-Type': 'application/json', ...authHeader(), ...init?.headers },
     ...init,
   });
   if (!res.ok) {
@@ -51,6 +57,8 @@ export const createSimulation = (
   });
 
 // Reports
+export const getJobReport = (jobId: string) => request<Report>(`/api/v1/jobs/${jobId}/report`);
+
 export const getReport = (reportId: string) => request<Report>(`/api/v1/reports/${reportId}`);
 
 export const getReportMarkdown = async (reportId: string): Promise<string> => {

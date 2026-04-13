@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { createSimulation, generatePoc, getFindings, getJob } from '@/lib/api';
+import { createSimulation, generatePoc, getFindings, getJob, getJobReport } from '@/lib/api';
 import type { Finding, Job } from '@/types';
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -126,7 +126,14 @@ export default function JobPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h2 style={{ margin: 0 }}>Findings ({findings.length})</h2>
             <button
-              onClick={() => router.push(`/reports/${id}`)}
+              onClick={async () => {
+                try {
+                  const report = await getJobReport(id);
+                  router.push(`/reports/${report.id}`);
+                } catch {
+                  alert('Report not ready yet. Please try again shortly.');
+                }
+              }}
               style={{ padding: '0.5rem 1.2rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
             >
               View Report

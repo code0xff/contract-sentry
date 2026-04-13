@@ -34,7 +34,9 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
             return
         job.status = JobStatus.RUNNING
         job.started_at = datetime.now(tz=timezone.utc)
-        source = contract.source or contract.bytecode or ""
+        bytecode: str | None = contract.bytecode
+        source = contract.source or bytecode or ""
+        bytecode_only = not contract.source and bool(bytecode)
 
     try:
         collected_findings = []
@@ -45,9 +47,13 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
                 elif tool == ToolName.MYTHRIL.value:
                     findings = MythrilAnalyzer().analyze(source)
                 elif tool == ToolName.ECHIDNA.value:
-                    from app.analyzers.echidna_analyzer import EchidnaAnalyzer
+                    if bytecode_only:
+                        log.info("echidna_skipped_bytecode_only", job_id=job_id)
+                        findings = []
+                    else:
+                        from app.analyzers.echidna_analyzer import EchidnaAnalyzer
 
-                    findings = EchidnaAnalyzer().analyze(source)
+                        findings = EchidnaAnalyzer().analyze(source)
                 else:
                     findings = []
                 JOB_TOTAL.labels(tool=tool, status="ok").inc()
@@ -82,6 +88,10 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
             job.status = JobStatus.COMPLETED
             job.progress = 100
             job.finished_at = datetime.now(tz=timezone.utc)
+            # Cache result by bytecode hash after successful completion
+            if bytecode:
+                from app.core.cache import set_cached_job_id
+                await set_cached_job_id(bytecode, tools, job_id)
 
     except Exception as exc:
         log.error("analysis_orchestrator_failed", job_id=job_id, error=str(exc))

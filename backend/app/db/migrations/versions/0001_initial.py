@@ -36,7 +36,7 @@ _vulnerability_type = sa.Enum(
     name="vulnerabilitytype",
 )
 _tool_name = sa.Enum(
-    "slither", "mythril", "echidna", "foundry", "internal",
+    "slither", "mythril", "echidna", "foundry", "internal", "medusa",
     name="toolname",
 )
 _simulation_status = sa.Enum(
@@ -50,6 +50,24 @@ _report_status = sa.Enum(
 
 
 def upgrade() -> None:
+    # ------------------------------------------------------------------ #
+    # users
+    # ------------------------------------------------------------------ #
+    op.create_table(
+        "users",
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("email", sa.String(255), nullable=False, unique=True),
+        sa.Column("hashed_password", sa.String(255), nullable=False),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
+    )
+    op.create_index("ix_users_email", "users", ["email"], unique=True)
+
     # ------------------------------------------------------------------ #
     # contracts
     # ------------------------------------------------------------------ #
@@ -214,6 +232,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index("ix_users_email", table_name="users")
+    op.drop_table("users")
     op.drop_table("reports")
     op.drop_table("simulation_runs")
     op.drop_table("evidences")

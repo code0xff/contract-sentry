@@ -47,7 +47,11 @@ class Settings(BaseSettings):
     github_webhook_secret: str | None = None
 
     # JWT
-    SECRET_KEY: str = "change-me-in-production-use-long-random-string"
+    SECRET_KEY: str = Field(
+        default="change-me-in-production-use-long-random-string",
+        min_length=32,
+        description="Must be at least 32 chars; override in production",
+    )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     ALGORITHM: str = "HS256"
 

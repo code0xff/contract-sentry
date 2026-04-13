@@ -72,6 +72,22 @@ async def simulate(
     return sim
 
 
+@router.get("/{job_id}/report")
+async def get_job_report(
+    job_id: str, session: AsyncSession = Depends(get_session)
+) -> dict:
+    """Return the report for a given job, or 404 if not yet generated."""
+    from sqlalchemy import select as sa_select
+
+    from app.models.domain import Report
+    from app.schemas.report import ReportOut
+    result = await session.execute(sa_select(Report).where(Report.job_id == job_id))
+    report = result.scalar_one_or_none()
+    if report is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found")
+    return ReportOut.model_validate(report).model_dump()
+
+
 @router.get("/{job_id}/diff", response_model=FindingDiff)
 async def diff_findings(
     job_id: str,
@@ -101,8 +117,9 @@ async def diff_findings(
     )
     findings_b = list(result_b.scalars().all())
 
-    keys_a = {(f.vulnerability_type, f.location): f for f in findings_a}
-    keys_b = {(f.vulnerability_type, f.location): f for f in findings_b}
+    # Include title to avoid collisions between distinct bugs at the same location
+    keys_a = {(f.vulnerability_type, f.location or "", f.title): f for f in findings_a}
+    keys_b = {(f.vulnerability_type, f.location or "", f.title): f for f in findings_b}
 
     new_findings = [FindingOut.model_validate(f) for k, f in keys_b.items() if k not in keys_a]
     fixed_findings = [FindingOut.model_validate(f) for k, f in keys_a.items() if k not in keys_b]

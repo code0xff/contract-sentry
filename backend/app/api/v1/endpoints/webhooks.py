@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 def _verify_signature(body: bytes, signature: str | None) -> None:
     if not settings.github_webhook_secret:
-        return  # secret not configured → skip verification
+        # No secret configured → reject all webhook requests to prevent unauth job creation
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "webhook secret not configured")
     if not signature or not signature.startswith("sha256="):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing or invalid signature")
     expected = "sha256=" + hmac.new(
@@ -58,13 +59,9 @@ async def github_webhook(
                         f"{repo.get('full_name','unknown')}/HEAD/{fname}"
                     )
                     sol_files.append((fname, raw_url))
-    elif x_github_event == "pull_request":
-        if payload.get("action") in ("opened", "synchronize"):
-            repo_full = payload.get("repository", {}).get("full_name", "unknown")
-            for fname in payload.get("files_changed", []):
-                if isinstance(fname, str) and fname.endswith(".sol"):
-                    raw_url = f"https://raw.githubusercontent.com/{repo_full}/HEAD/{fname}"
-                    sol_files.append((fname, raw_url))
+    # pull_request events do not include file lists in the payload;
+    # retrieving them requires a separate GitHub API call which is out of scope.
+    # PR-triggered analysis is therefore deferred until that integration is added.
 
     for fname, raw_url in sol_files:
         contract = Contract(

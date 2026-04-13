@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import get_cached_job_id, set_cached_job_id
+from app.core.cache import get_cached_job_id
 from app.db.session import get_session
 from app.models.domain import Contract, Job
 from app.schemas.contract import ContractCreate, ContractOut
@@ -76,7 +76,8 @@ async def analyze_contract(
         cached_id = await get_cached_job_id(contract.bytecode, tool_values)
         if cached_id is not None:
             cached_job = await session.get(Job, cached_id)
-            if cached_job is not None:
+            # Only serve completed jobs from cache; stale pending/failed entries are ignored
+            if cached_job is not None and cached_job.status == JobStatus.COMPLETED:
                 response.headers["x-cache"] = "HIT"
                 return cached_job
 
@@ -91,8 +92,5 @@ async def analyze_contract(
     await session.refresh(job)
 
     dispatch_job(job.id, contract.id, tool_values)
-
-    if contract.bytecode:
-        await set_cached_job_id(contract.bytecode, tool_values, job.id)
-
+    # Cache write is deferred to the worker task after successful completion
     return job
