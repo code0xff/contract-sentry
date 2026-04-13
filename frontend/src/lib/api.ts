@@ -1,0 +1,66 @@
+import type { Contract, Finding, Job, Report, Simulation } from '@/types';
+
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    ...init,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`${res.status} ${text}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+// Contracts
+export const createContract = (payload: {
+  name: string;
+  language: string;
+  source?: string;
+  bytecode?: string;
+  compiler_version?: string;
+}) => request<Contract>('/api/v1/contracts', { method: 'POST', body: JSON.stringify(payload) });
+
+export const listContracts = () => request<Contract[]>('/api/v1/contracts');
+
+export const getContract = (id: string) => request<Contract>(`/api/v1/contracts/${id}`);
+
+// Jobs
+export const analyzeContract = (contractId: string, tools?: string[]) =>
+  request<Job>(`/api/v1/contracts/${contractId}/analyze`, {
+    method: 'POST',
+    body: JSON.stringify(tools ? { tools } : {}),
+  });
+
+export const getJob = (jobId: string) => request<Job>(`/api/v1/jobs/${jobId}`);
+
+export const getFindings = (jobId: string) => request<Finding[]>(`/api/v1/jobs/${jobId}/findings`);
+
+export const createSimulation = (
+  jobId: string,
+  payload: { template: string; fork_rpc_url?: string; fork_block?: number; finding_id?: string }
+) =>
+  request<Simulation>(`/api/v1/jobs/${jobId}/simulate`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+// Reports
+export const getReport = (reportId: string) => request<Report>(`/api/v1/reports/${reportId}`);
+
+export const getReportMarkdown = async (reportId: string): Promise<string> => {
+  const res = await fetch(`${BASE}/api/v1/reports/${reportId}/markdown`);
+  if (!res.ok) throw new Error(res.statusText);
+  return res.text();
+};
+
+export const getReportHtml = async (reportId: string): Promise<string> => {
+  const res = await fetch(`${BASE}/api/v1/reports/${reportId}/html`);
+  if (!res.ok) throw new Error(res.statusText);
+  return res.text();
+};
+
+// Simulations
+export const getSimulation = (simId: string) => request<Simulation>(`/api/v1/simulations/${simId}`);

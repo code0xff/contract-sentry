@@ -1,0 +1,156 @@
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://centry:centry@postgres:5432/centry"
+      REDIS_URL: "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+      LOG_LEVEL: "INFO"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker-static:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    command: >
+      celery -A app.workers.celery_app.celery_app worker
+      --queues=static_analysis
+      --concurrency=2
+      --loglevel=info
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://centry:centry@postgres:5432/centry"
+      REDIS_URL: "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  worker-dynamic:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    command: >
+      celery -A app.workers.celery_app.celery_app worker
+      --queues=dynamic_analysis
+      --concurrency=1
+      --loglevel=info
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://centry:centry@postgres:5432/centry"
+      REDIS_URL: "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  worker-simulation:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    command: >
+      celery -A app.workers.celery_app.celery_app worker
+      --queues=simulation
+      --concurrency=1
+      --loglevel=info
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://centry:centry@postgres:5432/centry"
+      REDIS_URL: "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  worker-report:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    command: >
+      celery -A app.workers.celery_app.celery_app worker
+      --queues=report
+      --concurrency=2
+      --loglevel=info
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://centry:centry@postgres:5432/centry"
+      REDIS_URL: "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: centry
+      POSTGRES_PASSWORD: centry
+      POSTGRES_DB: centry
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U centry -d centry"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:8000"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:
