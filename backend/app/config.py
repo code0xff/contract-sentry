@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     slack_webhook_url: str | None = None
     github_webhook_secret: str | None = None
 
+    # JWT
+    SECRET_KEY: str = "change-me-in-production-use-long-random-string"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    ALGORITHM: str = "HS256"
+
     # Fork
     fork_rpc_url: str | None = None
 
