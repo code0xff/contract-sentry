@@ -35,8 +35,16 @@ class Settings(BaseSettings):
     dynamic_analysis_timeout_s: int = 600
     simulation_timeout_s: int = 900
 
+    # Analysis cache
+    analysis_cache_ttl: int = 86400  # 24 hours
+
     # Upload limits
     max_contract_bytes: int = 512 * 1024
+
+    # Webhooks
+    webhook_url: str | None = None
+    slack_webhook_url: str | None = None
+    github_webhook_secret: str | None = None
 
     # Fork
     fork_rpc_url: str | None = None
@@ -52,3 +60,6 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+settings = get_settings()

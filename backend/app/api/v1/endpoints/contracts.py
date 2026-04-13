@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import get_cached_job_id, set_cached_job_id
 from app.db.session import get_session
 from app.models.domain import Contract, Job
 from app.schemas.contract import ContractCreate, ContractOut
@@ -60,6 +61,7 @@ async def list_contract_jobs(contract_id: str, session: AsyncSession = Depends(g
 @router.post("/{contract_id}/analyze", response_model=JobOut, status_code=status.HTTP_202_ACCEPTED)
 async def analyze_contract(
     contract_id: str,
+    response: Response,
     payload: JobCreate | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> Job:
@@ -68,15 +70,29 @@ async def analyze_contract(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "contract not found")
 
     tools = payload.tools if payload else [ToolName.SLITHER, ToolName.MYTHRIL]
+    tool_values = [t.value for t in tools]
+
+    if contract.bytecode:
+        cached_id = await get_cached_job_id(contract.bytecode, tool_values)
+        if cached_id is not None:
+            cached_job = await session.get(Job, cached_id)
+            if cached_job is not None:
+                response.headers["x-cache"] = "HIT"
+                return cached_job
+
     job = Job(
         contract_id=contract.id,
         status=JobStatus.PENDING,
-        tools=[t.value for t in tools],
+        tools=tool_values,
         progress=0,
     )
     session.add(job)
     await session.commit()
     await session.refresh(job)
 
-    dispatch_job(job.id, contract.id, [t.value for t in tools])
+    dispatch_job(job.id, contract.id, tool_values)
+
+    if contract.bytecode:
+        await set_cached_job_id(contract.bytecode, tool_values, job.id)
+
     return job
