@@ -15,6 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </a>
           <a href="/" style={{ color: '#ccc', textDecoration: 'none', fontSize: '0.9rem' }}>New Analysis</a>
           <a href="/contracts" style={{ color: '#ccc', textDecoration: 'none', fontSize: '0.9rem' }}>Contracts</a>
+          <a href="/login" style={{ color: '#ccc', textDecoration: 'none', fontSize: '0.9rem', marginLeft: 'auto' }}>Login</a>
         </nav>
         <main style={{ maxWidth: 960, margin: '0 auto', padding: '2rem 1rem' }}>
           {children}
