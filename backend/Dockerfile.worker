@@ -22,6 +22,21 @@ COPY requirements.txt ./
 # Install Python deps + static analysis tools
 RUN pip install --no-cache-dir -r requirements.txt slither-analyzer mythril
 
+# Echidna (static binary)
+RUN apt-get update -qq && apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -L https://github.com/crytic/echidna/releases/download/v2.2.3/echidna-2.2.3-x86_64-linux.tar.gz \
+    -o /tmp/echidna.tar.gz && \
+    tar -xzf /tmp/echidna.tar.gz -C /usr/local/bin/ && \
+    chmod +x /usr/local/bin/echidna && \
+    rm /tmp/echidna.tar.gz
+
+# Medusa fuzzer
+RUN curl -L https://github.com/crytic/medusa/releases/download/v0.1.8/medusa-linux-x64.tar.gz \
+    -o /tmp/medusa.tar.gz && \
+    tar -xzf /tmp/medusa.tar.gz -C /usr/local/bin/ && \
+    chmod +x /usr/local/bin/medusa && \
+    rm /tmp/medusa.tar.gz
+
 COPY app ./app
 
 USER app

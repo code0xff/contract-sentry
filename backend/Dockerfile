@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Security analysis tools
+RUN pip install slither-analyzer mythril
+
 COPY . .
 
 # Run as non-root
