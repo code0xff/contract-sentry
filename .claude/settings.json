@@ -1,0 +1,122 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch",
+      "Bash(*)",
+      "Bash(git:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(which:*)",
+      "Bash(pwd)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(xargs:*)",
+      "Bash(sed:*)",
+      "Bash(awk:*)",
+      "Bash(date:*)",
+      "Bash(mktemp:*)",
+      "Bash(test:*)",
+      "Bash(chmod:*)",
+      "Bash(sh:*)",
+      "Bash(wc:*)",
+      "Bash(jq:*)",
+      "Bash(diff:*)",
+      "Bash(echo:*)",
+      "Bash(codex:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(.claude/hooks/*)",
+      "Bash(.claude/tests/*)",
+      "Bash(.github/*)",
+      "Write(**)",
+      "Edit(**)",
+      "MultiEdit(**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/validate-pre-approval.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-risk-policy.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/validate-commit-msg.sh",
+            "if": "Bash(git commit*)"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/validate-project-profile.sh",
+            "if": "Bash(git commit*)"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/validate-project-approvals.sh",
+            "if": "Bash(git commit*)"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/validate-project-automation.sh",
+            "if": "Bash(git commit*)"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/check-engine-readiness.sh",
+            "if": "Bash(git commit*)"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/run-automation-gates.sh commit",
+            "if": "Bash(git commit*)"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/run-quality-gates.sh commit",
+            "if": "Bash(git commit*)"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/validate-project-profile.sh",
+            "if": "Bash(git push*)"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/validate-project-approvals.sh",
+            "if": "Bash(git push*)"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/validate-project-automation.sh",
+            "if": "Bash(git push*)"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/check-engine-readiness.sh",
+            "if": "Bash(git push*)"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/run-automation-gates.sh push",
+            "if": "Bash(git push*)"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/run-quality-gates.sh push",
+            "if": "Bash(git push*)"
+          }
+        ]
+      }
+    ]
+  }
+}
