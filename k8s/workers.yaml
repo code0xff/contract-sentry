@@ -1,0 +1,155 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-static
+  namespace: contract-centry
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: worker-static
+  template:
+    metadata:
+      labels:
+        app: worker-static
+    spec:
+      containers:
+        - name: worker-static
+          image: contract-centry-worker:latest
+          command:
+            - celery
+            - -A
+            - app.workers.celery_app.celery_app
+            - worker
+            - --queues=static_analysis
+            - --concurrency=2
+            - --loglevel=info
+          envFrom:
+            - configMapRef:
+                name: contract-centry-config
+            - secretRef:
+                name: contract-centry-secrets
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-dynamic
+  namespace: contract-centry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-dynamic
+  template:
+    metadata:
+      labels:
+        app: worker-dynamic
+    spec:
+      containers:
+        - name: worker-dynamic
+          image: contract-centry-worker:latest
+          command:
+            - celery
+            - -A
+            - app.workers.celery_app.celery_app
+            - worker
+            - --queues=dynamic_analysis
+            - --concurrency=1
+            - --loglevel=info
+          envFrom:
+            - configMapRef:
+                name: contract-centry-config
+            - secretRef:
+                name: contract-centry-secrets
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-simulation
+  namespace: contract-centry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-simulation
+  template:
+    metadata:
+      labels:
+        app: worker-simulation
+    spec:
+      containers:
+        - name: worker-simulation
+          image: contract-centry-worker:latest
+          command:
+            - celery
+            - -A
+            - app.workers.celery_app.celery_app
+            - worker
+            - --queues=simulation
+            - --concurrency=1
+            - --loglevel=info
+          envFrom:
+            - configMapRef:
+                name: contract-centry-config
+            - secretRef:
+                name: contract-centry-secrets
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-report
+  namespace: contract-centry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-report
+  template:
+    metadata:
+      labels:
+        app: worker-report
+    spec:
+      containers:
+        - name: worker-report
+          image: contract-centry-worker:latest
+          command:
+            - celery
+            - -A
+            - app.workers.celery_app.celery_app
+            - worker
+            - --queues=report
+            - --concurrency=2
+            - --loglevel=info
+          envFrom:
+            - configMapRef:
+                name: contract-centry-config
+            - secretRef:
+                name: contract-centry-secrets
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
