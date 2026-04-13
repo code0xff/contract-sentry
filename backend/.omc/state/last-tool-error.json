@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"~/.local/bin/ruff check app/ tests/ 2>&1\",\"description\":\"Run ruff lint check\"}",
-  "error": "Exit code 1\nB008 Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable\n  --> app/api/v1/endpoints/contracts.py:20:29\n   |\n18 | async def create_contract(\n19 |     payload: ContractCreate,\n20 |     session: AsyncSession = Depends(get_session),\n   |                             ^^^^^^^^^^^^^^^^^^^^\n21 | ) -> Contract:\n22 |     contract = Contract(\n   |\n\nB008 Do not perform function call ...",
-  "timestamp": "2026-04-13T14:40:20.642Z",
-  "retry_count": 2
+  "tool_input_preview": "{\"command\":\"~/.local/bin/ruff check app/ tests/ && echo \\\"lint clean\\\"\",\"description\":\"Verify lint is clean after fix\"}",
+  "error": "Exit code 1\nI001 [*] Import block is un-sorted or un-formatted\n --> tests/test_aggregator.py:2:1\n  |\n1 |   \"\"\"Aggregator unit tests.\"\"\"\n2 | / from __future__ import annotations\n3 | |\n4 | | import pytest\n5 | |\n6 | | from app.reporters.aggregator import aggregate_findings, composite_severity\n7 | | from app.schemas.enums import Severity, ToolName, VulnerabilityType\n8 | | from app.schemas.finding import FindingCreate\n  | |_____________________________________________^\n  |\nhelp: Organize imports\n\nF40...",
+  "timestamp": "2026-04-13T14:43:58.712Z",
+  "retry_count": 1
 }
