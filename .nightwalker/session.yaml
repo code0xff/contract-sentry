@@ -1,0 +1,13 @@
+schema_version: 1
+status: ready
+project_goal: "EVM 기반 스마트 컨트랙트의 정적/동적 취약점 분석, 익스플로잇 자동화 시뮬레이션, 보안 리포트 생성을 통해 배포 전 취약점을 사전 파악하고 수정을 지원하는 보안 테스트 플랫폼"
+target_users: "스마트 컨트랙트 개발자, 보안 감사자/화이트햇 해커, DeFi/NFT 프로젝트팀, 블록체인 보안 연구자"
+core_features: "소스코드/바이트코드 업로드 및 분석, 정적 분석(Slither/Mythril 통합), 동적 분석/퍼징(Echidna/Medusa), 익스플로잇 자동 생성 및 실행(시뮬레이션), 취약점 리포트 생성, 포크 네트워크 공격 시뮬레이션"
+constraints: "로컬 실행 우선(Docker Compose 기반 이후 클라우드 배포 가능), 오픈소스 분석 도구 통합, 비동기 큐 기반(장시간 분석 작업 대응), API-first 설계(CLI+Web UI 지원), 컨트랙트 실행은 격리 샌드박스에서만"
+project_archetype: system-platform
+stack_candidate_1: "Python + FastAPI + Slither/Mythril/Echidna + Foundry/web3.py + Celery/Redis + Next.js + Docker"
+stack_candidate_2: "Node.js + NestJS(TypeScript) + Python 분석 워커 + viem/ethers.js + BullMQ/Redis + Next.js + Docker"
+stack_candidate_3: "Go + Gin/Echo + Python gRPC 분석 마이크로서비스 + go-ethereum + Redis Streams + Next.js + Docker"
+selected_stack: stack_candidate_1
+open_questions: unset
+decisions: "project_archetype=system-platform 선택 이유: 분석 엔진 교체/확장이 핵심 설계 요소이며 시스템 계약/운영성/확장성이 우선; selected_stack=stack_candidate_1 선택 이유: 핵심 보안 도구(Slither/Mythril/Echidna)가 Python 네이티브이며 언어 브릿지 없이 통합 가능, GIL 문제는 Docker 격리 및 Celery 멀티프로세스로 해소"
