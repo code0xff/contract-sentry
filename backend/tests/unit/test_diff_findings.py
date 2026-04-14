@@ -34,9 +34,9 @@ def _mk(
 
 
 def _diff(findings_a: list[FindingOut], findings_b: list[FindingOut]) -> FindingDiff:
-    """Pure diff logic extracted from the endpoint."""
-    keys_a = {(f.vulnerability_type, f.location): f for f in findings_a}
-    keys_b = {(f.vulnerability_type, f.location): f for f in findings_b}
+    """Pure diff logic extracted from the endpoint (mirrors jobs.py:134 key logic)."""
+    keys_a = {(f.vulnerability_type, f.location or "", f.title): f for f in findings_a}
+    keys_b = {(f.vulnerability_type, f.location or "", f.title): f for f in findings_b}
 
     new_findings = [f for k, f in keys_b.items() if k not in keys_a]
     fixed_findings = [f for k, f in keys_a.items() if k not in keys_b]

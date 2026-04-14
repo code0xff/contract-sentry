@@ -54,6 +54,14 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
                         from app.analyzers.echidna_analyzer import EchidnaAnalyzer
 
                         findings = EchidnaAnalyzer().analyze(source)
+                elif tool == ToolName.MEDUSA.value:
+                    if bytecode_only:
+                        log.info("medusa_skipped_bytecode_only", job_id=job_id)
+                        findings = []
+                    else:
+                        from app.analyzers.medusa_analyzer import MedusaAnalyzer
+
+                        findings = MedusaAnalyzer().analyze(source)
                 else:
                     findings = []
                 JOB_TOTAL.labels(tool=tool, status="ok").inc()
