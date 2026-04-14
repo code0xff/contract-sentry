@@ -89,7 +89,7 @@ def test_diff_fixed_finding():
 
 
 def test_diff_persisting():
-    """Same (vulnerability_type, location) in both jobs — appears in persisting."""
+    """Same (vulnerability_type, location, title) in both jobs — appears in persisting."""
     a = _mk("a1", "job-a", VulnerabilityType.REENTRANCY, "C.sol:20")
     b = _mk("b1", "job-b", VulnerabilityType.REENTRANCY, "C.sol:20")
     result = _diff([a], [b])
