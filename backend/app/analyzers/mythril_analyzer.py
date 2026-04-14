@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,13 @@ MYTHRIL_SEVERITY_MAP = {
 }
 
 
+_OZ_PATH = os.environ.get(
+    "OZ_CONTRACTS_PATH", "/usr/local/lib/node_modules/@openzeppelin"
+)
+
+SOLC_REMAPPINGS = f"@openzeppelin={_OZ_PATH}"
+
+
 class MythrilAnalyzer(BaseAnalyzer):
     tool_name = "mythril"
 
@@ -47,7 +55,11 @@ class MythrilAnalyzer(BaseAnalyzer):
 
             try:
                 result = run_sandboxed(
-                    [self.binary, "analyze", str(src_path), "-o", "json"],
+                    [
+                        self.binary, "analyze", str(src_path),
+                        "-o", "json",
+                        "--solc-remaps", SOLC_REMAPPINGS,
+                    ],
                     timeout=self.timeout,
                 )
             except SandboxError as exc:

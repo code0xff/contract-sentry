@@ -5,8 +5,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/home/app/.local/bin:/root/.foundry/bin:$PATH"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      build-essential git curl ca-certificates \
+      build-essential git curl ca-certificates nodejs npm \
     && rm -rf /var/lib/apt/lists/*
+
+# Pre-install common Solidity libraries for import resolution
+RUN npm install -g \
+      @openzeppelin/contracts \
+      @openzeppelin/contracts-upgradeable \
+    && rm -rf /root/.npm
+
+ENV OZ_CONTRACTS_PATH=/usr/local/lib/node_modules/@openzeppelin
 
 # Install Foundry (forge + anvil) system-wide
 RUN curl -L https://foundry.paradigm.xyz | bash && /root/.foundry/bin/foundryup \

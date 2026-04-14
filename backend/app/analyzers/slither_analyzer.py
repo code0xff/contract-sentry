@@ -6,6 +6,7 @@ parses the JSON output and normalizes detectors into ``FindingCreate``.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,13 @@ SLITHER_CHECK_MAP = {
 }
 
 
+_OZ_PATH = os.environ.get(
+    "OZ_CONTRACTS_PATH", "/usr/local/lib/node_modules/@openzeppelin"
+)
+
+SOLC_REMAPPINGS = f"@openzeppelin={_OZ_PATH}"
+
+
 class SlitherAnalyzer(BaseAnalyzer):
     tool_name = "slither"
 
@@ -60,7 +68,11 @@ class SlitherAnalyzer(BaseAnalyzer):
 
             try:
                 result = run_sandboxed(
-                    [self.binary, str(src_path), "--json", "-"],
+                    [
+                        self.binary, str(src_path),
+                        "--json", "-",
+                        "--solc-remaps", SOLC_REMAPPINGS,
+                    ],
                     timeout=self.timeout,
                 )
             except SandboxError as exc:
