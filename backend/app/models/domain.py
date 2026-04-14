@@ -92,6 +92,8 @@ class Finding(Base):
     confidence: Mapped[float] = mapped_column(Float, default=0.5)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
 
+    poc_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     job: Mapped[Job] = relationship("Job", back_populates="findings")
     evidences: Mapped[list["Evidence"]] = relationship(
         "Evidence", back_populates="finding", cascade="all, delete-orphan"
@@ -126,6 +128,8 @@ class SimulationRun(Base):
     output: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    poc_code: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     job: Mapped[Job] = relationship("Job", back_populates="simulations")
 

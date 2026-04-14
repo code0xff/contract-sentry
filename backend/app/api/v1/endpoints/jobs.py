@@ -56,6 +56,18 @@ async def simulate(
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
 
+    # If a finding is referenced and has AI-generated PoC, carry it over automatically
+    poc_code = payload.poc_code
+    if poc_code is None and payload.finding_id:
+        f_result = await session.execute(
+            select(Finding).where(
+                Finding.id == payload.finding_id, Finding.job_id == job_id
+            )
+        )
+        linked_finding = f_result.scalars().first()
+        if linked_finding is not None:
+            poc_code = linked_finding.poc_code
+
     sim = SimulationRun(
         job_id=job.id,
         finding_id=payload.finding_id,
@@ -63,6 +75,7 @@ async def simulate(
         status=SimulationStatus.QUEUED,
         fork_rpc_url=payload.fork_rpc_url,
         fork_block=payload.fork_block,
+        poc_code=poc_code,
     )
     session.add(sim)
     await session.commit()
@@ -158,4 +171,6 @@ async def generate_finding_poc(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "finding not found")
 
     poc = await generate_poc(FindingOut.model_validate(finding))
+    finding.poc_code = poc
+    await session.commit()
     return {"poc": poc}

@@ -12,6 +12,7 @@ class SimulationRequest(BaseModel):
     template: VulnerabilityType = VulnerabilityType.REENTRANCY
     fork_rpc_url: str | None = None
     fork_block: int | None = Field(default=None, ge=0)
+    poc_code: str | None = None  # AI-generated Solidity; overrides stub template when provided
 
 
 class SimulationOut(BaseModel):
@@ -24,6 +25,7 @@ class SimulationOut(BaseModel):
     template: str
     fork_rpc_url: str | None = None
     fork_block: int | None = None
+    poc_code: str | None = None
     output: str | None = None
     trace: str | None = None
     created_at: datetime

@@ -59,6 +59,7 @@ class ForkSimulator(BaseSimulator):
         template: VulnerabilityType,
         fork_rpc_url: str | None = None,
         fork_block: int | None = None,
+        poc_code: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         if not fork_rpc_url:
@@ -74,11 +75,12 @@ class ForkSimulator(BaseSimulator):
                 "trace": None,
             }
 
+        test_code = poc_code if poc_code else template_for(template)
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "test").mkdir(parents=True, exist_ok=True)
             (root / "src").mkdir(parents=True, exist_ok=True)
-            (root / "test" / "Exploit.t.sol").write_text(template_for(template), encoding="utf-8")
+            (root / "test" / "Exploit.t.sol").write_text(test_code, encoding="utf-8")
             (root / "foundry.toml").write_text("[profile.default]\nsrc='src'\ntest='test'\n", encoding="utf-8")
 
             cmd = [self.binary, "test", "--fork-url", fork_rpc_url, "-vvv"]

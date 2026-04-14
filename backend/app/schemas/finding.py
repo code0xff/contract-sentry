@@ -41,6 +41,7 @@ class FindingOut(BaseModel):
     confidence: float
     created_at: datetime
     evidences: list[EvidenceOut] = []
+    poc_code: str | None = None
 
 
 class FindingDiff(BaseModel):

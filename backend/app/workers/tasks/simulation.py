@@ -20,6 +20,7 @@ async def _run(simulation_id: str, use_fork: bool) -> None:
     sim_template: str = ""
     sim_fork_rpc_url: str | None = None
     sim_fork_block: int | None = None
+    sim_poc_code: str | None = None
 
     async with session_scope() as session:
         sim = await session.get(SimulationRun, simulation_id)
@@ -30,6 +31,7 @@ async def _run(simulation_id: str, use_fork: bool) -> None:
         sim_template = sim.template
         sim_fork_rpc_url = sim.fork_rpc_url
         sim_fork_block = sim.fork_block
+        sim_poc_code = sim.poc_code
 
     try:
         template = VulnerabilityType(sim_template)
@@ -42,9 +44,10 @@ async def _run(simulation_id: str, use_fork: bool) -> None:
                 template=template,
                 fork_rpc_url=sim_fork_rpc_url,
                 fork_block=sim_fork_block,
+                poc_code=sim_poc_code,
             )
         else:
-            result = FoundrySimulator().run(template=template)
+            result = FoundrySimulator().run(template=template, poc_code=sim_poc_code)
     except Exception as exc:
         log.error("simulation_failed", simulation_id=simulation_id, error=str(exc))
         result = {"status": SimulationStatus.FAILED, "output": str(exc), "trace": None}
