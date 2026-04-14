@@ -25,6 +25,7 @@ services:
       retries: 5
 
   worker-static:
+    platform: linux/amd64
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
@@ -47,6 +48,7 @@ services:
       - ./backend:/app
 
   worker-dynamic:
+    platform: linux/amd64
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
@@ -69,6 +71,7 @@ services:
       - ./backend:/app
 
   worker-simulation:
+    platform: linux/amd64
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
@@ -91,6 +94,7 @@ services:
       - ./backend:/app
 
   worker-report:
+    platform: linux/amd64
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
