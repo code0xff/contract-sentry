@@ -6,7 +6,12 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code CLI for AI PoC generation
+RUN npm install -g @anthropic-ai/claude-code && rm -rf /root/.npm
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
