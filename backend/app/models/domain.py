@@ -132,6 +132,7 @@ class SimulationRun(Base):
     poc_code: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     job: Mapped[Job] = relationship("Job", back_populates="simulations")
+    finding: Mapped["Finding | None"] = relationship("Finding", foreign_keys=[finding_id])
 
 
 class Report(Base):
