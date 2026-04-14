@@ -41,4 +41,4 @@ Thumbs.db
 
 # Project state
 .claude/state/intents/
-.omc/state/
+.omc/
