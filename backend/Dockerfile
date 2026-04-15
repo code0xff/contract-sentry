@@ -16,9 +16,6 @@ RUN npm install -g @anthropic-ai/claude-code && rm -rf /root/.npm
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Security analysis tools
-RUN pip install slither-analyzer mythril
-
 COPY . .
 
 # Run as non-root

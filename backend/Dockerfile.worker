@@ -27,8 +27,14 @@ RUN useradd -m -u 1000 app
 WORKDIR /app
 
 COPY requirements.txt ./
-# Install Python deps + static analysis tools
-RUN pip install --no-cache-dir -r requirements.txt slither-analyzer mythril
+# Install Python deps + slither (web3 v6 compatible)
+RUN pip install --no-cache-dir -r requirements.txt slither-analyzer
+
+# Install mythril in isolated venv to avoid web3 v5/v6 conflict
+# mythril requires web3<6; the app requires web3>=6 — they cannot share site-packages
+RUN python -m venv /opt/mythril-venv && \
+    /opt/mythril-venv/bin/pip install --no-cache-dir mythril && \
+    ln -sf /opt/mythril-venv/bin/myth /usr/local/bin/myth
 
 # Echidna (static binary)
 RUN apt-get update -qq && apt-get install -y --no-install-recommends curl ca-certificates && \
