@@ -196,13 +196,24 @@ export default function HomePage() {
         .filter(p => !p.startsWith('@'));
       setEntryFiles(new Set(userOwned));
       setEntryFilesReady(true);
-      setCheckLoading(true);
-      const result = await compileCheck(contract.id);
-      setCheckResult(result);
+      // Do NOT auto-run compile-check — user can trigger it manually if needed
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCompileCheck() {
+    if (!uploadedContractId) return;
+    setCheckLoading(true);
+    setError(null);
+    try {
+      const result = await compileCheck(uploadedContractId);
+      setCheckResult(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Compile check failed');
+    } finally {
       setCheckLoading(false);
     }
   }
@@ -398,17 +409,25 @@ export default function HomePage() {
                     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
 
                     <Button type="submit" disabled={loading || selectedPaths.size === 0}>
-                      {loading ? 'Uploading & checking…' : `Upload${selectedPaths.size > 0 ? ` (${selectedPaths.size} files)` : ''}`}
+                      {loading ? 'Uploading…' : `Upload${selectedPaths.size > 0 ? ` (${selectedPaths.size} files)` : ''}`}
                     </Button>
                   </form>
                 )}
 
-                {/* ── Step 2: compile check result ── */}
+                {/* ── Step 2: analysis options ── */}
                 {uploadedContractId && (
                   <div className="space-y-4">
                     {checkLoading && (
                       <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400">
                         Checking compilation…
+                      </div>
+                    )}
+                    {!checkResult && !checkLoading && (
+                      <div className="flex items-center justify-between rounded-md border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                        <span>Upload complete. Optionally verify imports before analyzing.</span>
+                        <Button size="sm" variant="outline" onClick={handleCompileCheck} disabled={checkLoading}>
+                          Check Compilation
+                        </Button>
                       </div>
                     )}
 
@@ -513,7 +532,7 @@ export default function HomePage() {
 
                     <div className="flex gap-2">
                       <Button
-                        disabled={loading || checkLoading || !checkResult}
+                        disabled={loading || checkLoading}
                         onClick={handleStartAnalysis}
                       >
                         {loading ? 'Starting…' : 'Start Analysis'}
