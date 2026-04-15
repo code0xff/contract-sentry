@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getReport, getReportMarkdown } from '@/lib/api';
+import { getReport, getReportHtml, getReportMarkdown } from '@/lib/api';
 import type { Report } from '@/types';
 import { PageError, PageLoading } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,21 @@ export default function ReportPage() {
   const [markdown, setMarkdown] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [htmlLoading, setHtmlLoading] = useState(false);
+
+  async function openHtml() {
+    setHtmlLoading(true);
+    try {
+      const html = await getReportHtml(id);
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch {
+      /* ignore */
+    } finally {
+      setHtmlLoading(false);
+    }
+  }
 
   useEffect(() => {
     Promise.all([getReport(id), getReportMarkdown(id)])
@@ -99,14 +114,13 @@ export default function ReportPage() {
             <TabsTrigger value="summary">Overview</TabsTrigger>
             <TabsTrigger value="markdown">Full Report</TabsTrigger>
           </TabsList>
-          <a
-            href={`/api/v1/reports/${id}/html`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          <button
+            onClick={openHtml}
+            disabled={htmlLoading}
+            className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-50"
           >
-            HTML ↗
-          </a>
+            {htmlLoading ? 'Loading…' : 'HTML ↗'}
+          </button>
         </div>
 
         <Card>
