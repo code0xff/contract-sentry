@@ -130,6 +130,12 @@ class SlitherAnalyzer(BaseAnalyzer):
                         filter_parts.append(str(d))
             except OSError:
                 pass
+            # When specific entry_files are selected, also exclude user files NOT in the selection
+            if entry_files:
+                selected = {p for p in entry_files if not p.startswith("@")}
+                all_user = {p for p in files if p.endswith(".sol") and not p.startswith("@")}
+                for unselected in all_user - selected:
+                    filter_parts.append(str(tmp / unselected))
             cmd += ["--filter-paths", "|".join(filter_parts)]
 
             try:
