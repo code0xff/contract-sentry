@@ -48,6 +48,7 @@ class Contract(Base):
     source: Mapped[str | None] = mapped_column(Text, nullable=True)
     bytecode: Mapped[str | None] = mapped_column(Text, nullable=True)
     compiler_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    project_files: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
 
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="contract", cascade="all, delete-orphan")
@@ -62,6 +63,7 @@ class Job(Base):
     tools: Mapped[list[str]] = mapped_column(JSON, default=list)
     progress: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tool_errors: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

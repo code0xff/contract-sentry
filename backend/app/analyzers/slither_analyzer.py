@@ -6,16 +6,37 @@ parses the JSON output and normalizes detectors into ``FindingCreate``.
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
 
-from app.analyzers.base import AnalyzerError, BaseAnalyzer
+from app.analyzers.base import AnalyzerError, BaseAnalyzer, build_solc_remappings, resolve_npm_deps
 from app.config import get_settings
 from app.core.sandbox import SandboxError, run_sandboxed
 from app.schemas.enums import Severity, ToolName, VulnerabilityType
 from app.schemas.finding import FindingCreate
+
+log = logging.getLogger(__name__)
+
+
+def _ensure_solc(source: str) -> None:
+    """Auto-install the solc version required by pragma, using py-solc-x."""
+    try:
+        import solcx  # type: ignore[import]
+    except ImportError:
+        return
+    match = re.search(r'pragma\s+solidity\s+([^;]+)', source)
+    if not match:
+        return
+    pragma = match.group(1).strip()
+    try:
+        installed = solcx.install_solc_pragma(pragma, show_progress=False)
+        solcx.set_solc_version(installed, silent=True)
+    except Exception as exc:
+        log.warning("solc auto-install failed for pragma '%s': %s", pragma, exc)
 
 SLITHER_SEVERITY_MAP = {
     "High": Severity.HIGH,
@@ -58,9 +79,56 @@ class SlitherAnalyzer(BaseAnalyzer):
         self.binary = binary or settings.slither_bin
         self.timeout = timeout or settings.static_analysis_timeout_s
 
+    def analyze_files(self, files: dict[str, str]) -> list[FindingCreate]:
+        if not files:
+            return []
+
+        # Auto-install required solc version from any file's pragma
+        for content in files.values():
+            _ensure_solc(content)
+            break
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            for rel_path, content in files.items():
+                dest = tmp / rel_path
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content, encoding="utf-8")
+
+            # Auto-install missing npm packages detected from imports
+            resolve_npm_deps(tmp, files)
+
+            # Build remappings from globally installed + locally installed packages
+            remappings = build_solc_remappings(tmp)
+            cmd = [self.binary, str(tmp), "--json", "-"]
+            if remappings:
+                cmd += ["--solc-remaps", " ".join(remappings)]
+
+            try:
+                result = run_sandboxed(cmd, timeout=self.timeout, cwd=str(tmp))
+            except SandboxError as exc:
+                raise AnalyzerError(f"slither not available: {exc}") from exc
+
+            if result.timed_out:
+                raise AnalyzerError(f"slither timed out after {self.timeout}s")
+
+            if not result.stdout.strip():
+                if result.returncode != 0:
+                    raise AnalyzerError(f"slither failed: {result.stderr[:500]}")
+                return []
+
+            try:
+                data = json.loads(result.stdout)
+            except json.JSONDecodeError as exc:
+                raise AnalyzerError(f"slither emitted invalid JSON: {exc}") from exc
+
+            return self._normalize(data)
+
     def analyze(self, source: str) -> list[FindingCreate]:
         if not source:
             return []
+
+        _ensure_solc(source)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             src_path = Path(tmpdir) / "Contract.sol"

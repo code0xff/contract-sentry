@@ -22,6 +22,7 @@ class JobOut(BaseModel):
     tools: list[str]
     progress: int
     error: str | None = None
+    tool_errors: dict[str, str] | None = None
     created_at: datetime
     started_at: datetime | None = None
     finished_at: datetime | None = None

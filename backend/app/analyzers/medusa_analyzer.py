@@ -25,6 +25,33 @@ class MedusaAnalyzer(BaseAnalyzer):
         self.binary = binary or "medusa"
         self.timeout = timeout or settings.dynamic_analysis_timeout_s
 
+    def analyze_files(self, files: dict[str, str]) -> list[FindingCreate]:
+        if not files:
+            return []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            for rel_path, content in files.items():
+                dest = tmp / rel_path
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content, encoding="utf-8")
+
+            entry = str(tmp / sorted(files.keys())[0])
+
+            try:
+                result = run_sandboxed(
+                    [self.binary, "fuzz", "--target", entry, "--timeout", str(self.timeout)],
+                    timeout=self.timeout,
+                    cwd=str(tmp),
+                )
+            except SandboxError as exc:
+                raise AnalyzerError(f"medusa not available: {exc}") from exc
+
+            if result.timed_out:
+                raise AnalyzerError(f"medusa timed out after {self.timeout}s")
+
+            return self._parse(result.stdout + "\n" + result.stderr)
+
     def analyze(self, source: str) -> list[FindingCreate]:
         if not source:
             return []

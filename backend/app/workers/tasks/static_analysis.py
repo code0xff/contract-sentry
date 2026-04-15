@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json as _json
 from datetime import datetime, timezone
 
 from app.analyzers.mythril_analyzer import MythrilAnalyzer
@@ -37,15 +38,24 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
         bytecode: str | None = contract.bytecode
         source = contract.source or bytecode or ""
         bytecode_only = not contract.source and bool(bytecode)
+        project_files: dict[str, str] | None = None
+        if contract.project_files:
+            try:
+                project_files = _json.loads(contract.project_files)
+            except Exception:
+                log.warning("invalid_project_files_json", contract_id=contract_id)
 
     try:
         collected_findings = []
+        tool_errors: dict[str, str] = {}
         for tool in tools:
             try:
                 if tool == ToolName.SLITHER.value:
-                    findings = SlitherAnalyzer().analyze(source)
+                    analyzer_s = SlitherAnalyzer()
+                    findings = analyzer_s.analyze_files(project_files) if project_files else analyzer_s.analyze(source)
                 elif tool == ToolName.MYTHRIL.value:
-                    findings = MythrilAnalyzer().analyze(source)
+                    analyzer_m = MythrilAnalyzer()
+                    findings = analyzer_m.analyze_files(project_files) if project_files else analyzer_m.analyze(source)
                 elif tool == ToolName.ECHIDNA.value:
                     if bytecode_only:
                         log.info("echidna_skipped_bytecode_only", job_id=job_id)
@@ -53,7 +63,8 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
                     else:
                         from app.analyzers.echidna_analyzer import EchidnaAnalyzer
 
-                        findings = EchidnaAnalyzer().analyze(source)
+                        analyzer_e = EchidnaAnalyzer()
+                        findings = analyzer_e.analyze_files(project_files) if project_files else analyzer_e.analyze(source)
                 elif tool == ToolName.MEDUSA.value:
                     if bytecode_only:
                         log.info("medusa_skipped_bytecode_only", job_id=job_id)
@@ -61,14 +72,17 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
                     else:
                         from app.analyzers.medusa_analyzer import MedusaAnalyzer
 
-                        findings = MedusaAnalyzer().analyze(source)
+                        analyzer_med = MedusaAnalyzer()
+                        findings = analyzer_med.analyze_files(project_files) if project_files else analyzer_med.analyze(source)
                 else:
                     findings = []
                 JOB_TOTAL.labels(tool=tool, status="ok").inc()
                 collected_findings.extend(findings)
             except Exception as exc:
-                log.error("tool_failed", tool=tool, error=str(exc))
+                err_msg = str(exc)
+                log.error("tool_failed", tool=tool, error=err_msg)
                 TOOL_FAILURE.labels(tool=tool, reason=type(exc).__name__).inc()
+                tool_errors[tool] = err_msg
 
         # dedup + persist
         aggregated = aggregate_findings(collected_findings)
@@ -78,6 +92,7 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
             if job is None:
                 log.error("job_disappeared", job_id=job_id)
                 return
+            job.tool_errors = tool_errors if tool_errors else None
             for fc in aggregated:
                 finding = Finding(
                     job_id=job.id,

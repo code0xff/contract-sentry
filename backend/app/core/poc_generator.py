@@ -1,14 +1,22 @@
-"""LLM-based PoC generation via Claude CLI subprocess."""
+"""LLM-based PoC generation.
+
+Priority:
+  1. Anthropic SDK (ANTHROPIC_API_KEY env var)
+  2. Host claude CLI via http://host.docker.internal:CLAUDE_PROXY_PORT
+  3. Skip (return stub comment)
+"""
 from __future__ import annotations
 
-import asyncio
 import logging
-import shutil
+import os
 
-from app.config import settings
 from app.schemas.finding import FindingOut
 
 logger = logging.getLogger(__name__)
+
+MODEL = "claude-opus-4-6"
+MAX_TOKENS = 1024
+CLAUDE_PROXY_PORT = int(os.environ.get("CLAUDE_PROXY_PORT", "9876"))
 
 POC_PROMPT_TEMPLATE = """You are a smart contract security expert. Generate a minimal Solidity PoC (proof of concept) exploit for the following vulnerability.
 
@@ -18,54 +26,87 @@ Severity: {severity}
 Description: {description}
 Location: {location}
 
+{contract_section}
+
 Requirements:
 - Write minimal, working Solidity code (Foundry test format preferred)
 - Include comments explaining the attack steps
-- Keep it under 60 lines
+- Keep it under 80 lines
 - Use SPDX-License-Identifier: MIT and pragma solidity ^0.8.20
 
 Return ONLY the Solidity code, no explanations outside the code."""
 
 
-async def generate_poc(finding: FindingOut) -> str:
-    """Generate PoC exploit code by invoking the Claude CLI.
+def _contract_section(contract_source: str | None) -> str:
+    if not contract_source:
+        return ""
+    truncated = contract_source[:8000]
+    note = "\n// ... (truncated)" if len(contract_source) > 8000 else ""
+    return f"Contract source:\n```solidity\n{truncated}{note}\n```"
 
-    Calls: claude -p "<prompt>"
-    Returns the CLI stdout as the PoC code string.
-    Falls back to a comment stub if the CLI is not installed or fails.
-    """
-    if not shutil.which(settings.claude_bin):
-        return (
-            f"// PoC generation requires the Claude CLI ('{settings.claude_bin}') to be installed.\n"
-            f"// Finding: {finding.title} ({finding.vulnerability_type})\n"
-            "// Install Claude CLI and ensure it is on PATH to enable AI-generated PoCs.\n"
-        )
 
-    prompt = POC_PROMPT_TEMPLATE.format(
+def _build_prompt(finding: FindingOut, contract_source: str | None) -> str:
+    return POC_PROMPT_TEMPLATE.format(
         title=finding.title,
         vuln_type=finding.vulnerability_type,
         severity=finding.severity,
         description=finding.description,
         location=finding.location or "unknown",
+        contract_section=_contract_section(contract_source),
     )
 
+
+async def _via_sdk(prompt: str) -> str | None:
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
     try:
-        proc = await asyncio.create_subprocess_exec(
-            settings.claude_bin,
-            "-p",
-            prompt,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        import anthropic  # type: ignore[import]
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        message = await client.messages.create(
+            model=MODEL,
+            max_tokens=MAX_TOKENS,
+            messages=[{"role": "user", "content": prompt}],
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-        if proc.returncode != 0:
-            err = stderr.decode(errors="replace").strip()
-            logger.warning("claude cli exited %d: %s", proc.returncode, err)
-            return f"// PoC generation failed (exit {proc.returncode}).\n// {err[:200]}\n"
-        return stdout.decode(errors="replace").strip()
-    except TimeoutError:
-        logger.warning("claude cli timed out for finding %s", finding.id)
-        return f"// PoC generation timed out for: {finding.title}\n"
-    except Exception:
-        logger.warning("PoC generation error", exc_info=True)
-        return f"// PoC generation failed for: {finding.title}\n// Check logs for details.\n"
+        return message.content[0].text.strip()
+    except ImportError:
+        logger.warning("anthropic SDK not installed")
+        return None
+    except Exception as exc:
+        logger.warning("SDK PoC generation failed: %s", exc)
+        return None
+
+
+async def _via_host_proxy(prompt: str) -> str | None:
+    import aiohttp  # already a transitive dep via numerous packages
+    url = f"http://host.docker.internal:{CLAUDE_PROXY_PORT}/generate"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json={"prompt": prompt}, timeout=aiohttp.ClientTimeout(total=120)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data.get("poc") or None
+    except Exception as exc:
+        logger.debug("Host proxy not available: %s", exc)
+    return None
+
+
+async def generate_poc(finding: FindingOut, contract_source: str | None = None) -> str:
+    prompt = _build_prompt(finding, contract_source)
+
+    # 1. Try Anthropic SDK
+    result = await _via_sdk(prompt)
+    if result:
+        return result
+
+    # 2. Try host claude CLI proxy
+    result = await _via_host_proxy(prompt)
+    if result:
+        return result
+
+    # 3. Skip
+    logger.info("PoC generation skipped — no SDK key and no host proxy available")
+    return (
+        f"// PoC generation skipped: set ANTHROPIC_API_KEY or run scripts/claude-proxy.py on the host.\n"
+        f"// Finding: {finding.title} ({finding.vulnerability_type})\n"
+    )

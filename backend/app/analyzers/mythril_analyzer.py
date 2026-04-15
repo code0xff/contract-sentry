@@ -45,6 +45,47 @@ class MythrilAnalyzer(BaseAnalyzer):
         self.binary = binary or settings.mythril_bin
         self.timeout = timeout or settings.static_analysis_timeout_s
 
+    def analyze_files(self, files: dict[str, str]) -> list[FindingCreate]:
+        if not files:
+            return []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            for rel_path, content in files.items():
+                dest = tmp / rel_path
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content, encoding="utf-8")
+
+            # Use the first .sol file alphabetically as entry point
+            entry = str(tmp / sorted(files.keys())[0])
+
+            try:
+                result = run_sandboxed(
+                    [
+                        self.binary, "analyze", entry,
+                        "-o", "json",
+                        "--solc-remaps", SOLC_REMAPPINGS,
+                    ],
+                    timeout=self.timeout,
+                    cwd=str(tmp),
+                )
+            except SandboxError as exc:
+                raise AnalyzerError(f"mythril not available: {exc}") from exc
+
+            if result.timed_out:
+                raise AnalyzerError(f"mythril timed out after {self.timeout}s")
+
+            stdout = result.stdout.strip()
+            if not stdout:
+                return []
+
+            try:
+                data = json.loads(stdout)
+            except json.JSONDecodeError as exc:
+                raise AnalyzerError(f"mythril emitted invalid JSON: {exc}") from exc
+
+            return self._normalize(data)
+
     def analyze(self, source: str) -> list[FindingCreate]:
         if not source:
             return []

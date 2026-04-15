@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.poc_generator import generate_poc
 from app.db.session import get_session
-from app.models.domain import Finding, Job, SimulationRun
+from app.models.domain import Contract, Finding, Job, SimulationRun
 from app.schemas.enums import SimulationStatus
 from app.schemas.finding import FindingDiff, FindingOut
 from app.schemas.job import JobOut
@@ -23,6 +23,16 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session)) -> 
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
     return job
+
+
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_job(job_id: str, session: AsyncSession = Depends(get_session)) -> None:
+    """Delete a job and all associated findings, report, and simulations."""
+    job = await session.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+    await session.delete(job)
+    await session.commit()
 
 
 @router.get("/{job_id}/findings", response_model=list[FindingOut])
@@ -170,7 +180,10 @@ async def generate_finding_poc(
     if finding is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "finding not found")
 
-    poc = await generate_poc(FindingOut.model_validate(finding))
+    contract = await session.get(Contract, job.contract_id)
+    contract_source = contract.source if contract else None
+
+    poc = await generate_poc(FindingOut.model_validate(finding), contract_source=contract_source)
     finding.poc_code = poc
     await session.commit()
     return {"poc": poc}
