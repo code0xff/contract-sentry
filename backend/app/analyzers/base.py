@@ -78,7 +78,8 @@ def resolve_npm_deps(tmpdir: Path, files: dict[str, str]) -> None:
 
 
 def build_solc_remappings(tmpdir: Path) -> list[str]:
-    """Build ``@pkg=path`` remapping strings for slither/solc from available node_modules.
+    """Build ``@pkg=path`` remapping strings for slither/solc from available node_modules
+    and user-uploaded files stored under scoped paths (e.g. ``@universal/interfaces/``).
 
     Only includes packages that actually contain .sol files to avoid passing
     unrelated npm packages (e.g. CLI tools) to the Solidity compiler.
@@ -101,6 +102,23 @@ def build_solc_remappings(tmpdir: Path) -> list[str]:
                 if key not in seen and _has_sol_files(entry):
                     remappings.append(f"{key}={entry}")
                     seen.add(key)
+
+    # Also map user-uploaded files stored directly under @scope/pkg in tmpdir.
+    # e.g. tmpdir/@universal/interfaces/ISemver.sol → "@universal/interfaces=<path>"
+    try:
+        for scope_dir in tmpdir.iterdir():
+            if not scope_dir.name.startswith("@") or not scope_dir.is_dir():
+                continue
+            for pkg_dir in scope_dir.iterdir():
+                if not pkg_dir.is_dir():
+                    continue
+                key = f"@{scope_dir.name[1:]}/{pkg_dir.name}"
+                if key not in seen and _has_sol_files(pkg_dir):
+                    remappings.append(f"{key}={pkg_dir}")
+                    seen.add(key)
+    except (OSError, PermissionError):
+        pass
+
     return remappings
 
 
