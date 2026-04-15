@@ -70,7 +70,9 @@ class MythrilAnalyzer(BaseAnalyzer):
             cmd = [self.binary, "analyze", entry, "-o", "json"]
             all_remaps = ([SOLC_REMAPPINGS] if SOLC_REMAPPINGS else []) + remappings
             if all_remaps:
-                cmd += ["--solc-remaps", " ".join(all_remaps)]
+                # --solc-remaps is not valid; use --solc-json with remappings array
+                remap_json = json.dumps({"remappings": all_remaps})
+                cmd += ["--solc-json", remap_json]
             # Allow solc to resolve imports from anywhere inside tmpdir
             cmd += ["--solc-args", f"--allow-paths {tmpdir}"]
 
@@ -107,11 +109,12 @@ class MythrilAnalyzer(BaseAnalyzer):
             src_path.write_text(source, encoding="utf-8")
 
             try:
+                remap_json = json.dumps({"remappings": [SOLC_REMAPPINGS]})
                 result = run_sandboxed(
                     [
                         self.binary, "analyze", str(src_path),
                         "-o", "json",
-                        "--solc-remaps", SOLC_REMAPPINGS,
+                        "--solc-json", remap_json,
                     ],
                     timeout=self.timeout,
                 )

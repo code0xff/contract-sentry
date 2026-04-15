@@ -12,12 +12,13 @@ settings = get_settings()
 @worker_process_init.connect
 def _reset_db_pool(**kwargs: object) -> None:
     """Dispose the inherited connection pool after fork so each worker
-    process creates its own connections on a fresh event loop."""
-    import asyncio
-
+    process creates its own fresh connections without the parent event loop."""
     from app.db.session import engine
 
-    asyncio.run(engine.dispose())
+    # Use the synchronous engine to avoid asyncio event loop conflicts.
+    # asyncio.run(engine.dispose()) would create a new loop that conflicts
+    # with asyncpg connections inherited from the parent process.
+    engine.sync_engine.dispose(close=True)
 
 
 STATIC_ANALYSIS_QUEUE = "static_analysis"

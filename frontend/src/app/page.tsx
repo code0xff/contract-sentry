@@ -275,10 +275,8 @@ export default function HomePage() {
     setLoading(true);
     setError(null);
     try {
-      // Compute all user-owned files to determine if entry selection differs from default
-      const allUserOwned = allFiles.map(getPath).filter(p => !p.startsWith('@'));
-      const allSelected = allUserOwned.every(p => entryFiles.has(p)) && entryFiles.size === allUserOwned.length;
-      const entryFilesArg = (!allSelected && entryFiles.size > 0) ? [...entryFiles] : undefined;
+      // Always pass entry files so Job Status can display the analyzed file list
+      const entryFilesArg = entryFiles.size > 0 ? [...entryFiles] : undefined;
       const job = await analyzeContract(uploadedContractId, tools, entryFilesArg);
       router.push(`/jobs/${job.id}`);
     } catch (err) {
