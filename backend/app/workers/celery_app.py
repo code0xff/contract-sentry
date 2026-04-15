@@ -13,9 +13,11 @@ settings = get_settings()
 def _reset_db_pool(**kwargs: object) -> None:
     """Dispose the inherited connection pool after fork so each worker
     process creates its own connections on a fresh event loop."""
+    import asyncio
+
     from app.db.session import engine
 
-    engine.dispose()
+    asyncio.run(engine.dispose())
 
 
 STATIC_ANALYSIS_QUEUE = "static_analysis"
