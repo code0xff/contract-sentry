@@ -209,16 +209,34 @@ class SlitherAnalyzer(BaseAnalyzer):
         data: dict[str, Any],
         entry_files: list[str] | None = None,
     ) -> list[FindingCreate]:
-        # Build a set of normalised stems to match against filename_short.
-        # e.g. entry_files=["src/SponsorFund.sol"] → {"src/SponsorFund.sol", "SponsorFund.sol"}
-        allowed: set[str] | None = None
+        # Normalise entry file stems for matching against slither's filename_short.
+        # Use suffix matching: filename_short may have extra prefixes depending on how
+        # slither resolves paths relative to cwd.
+        allowed_suffixes: list[str] | None = None
         if entry_files:
-            allowed = set()
+            allowed_suffixes = []
             for p in entry_files:
-                allowed.add(p)
-                allowed.add(p.rsplit("/", 1)[-1])
+                # add full relative path and just basename
+                allowed_suffixes.append(p.lstrip("./"))
+                allowed_suffixes.append(p.rsplit("/", 1)[-1])
 
-        _DEP_MARKERS = ("node_modules", "/usr/local/lib/node_modules")
+        _DEP_MARKERS = ("node_modules",)
+
+        def _is_dep(fname: str) -> bool:
+            """Return True if fname looks like a dependency, not a user file."""
+            if any(m in fname for m in _DEP_MARKERS):
+                return True
+            return False
+
+        def _is_allowed(fname: str) -> bool:
+            """Return True if fname matches one of the selected entry files."""
+            if allowed_suffixes is None:
+                return True
+            clean = fname.lstrip("./")
+            for suf in allowed_suffixes:
+                if clean == suf or clean.endswith("/" + suf):
+                    return True
+            return False
 
         out: list[FindingCreate] = []
         results = data.get("results", {}).get("detectors", []) if isinstance(data, dict) else []
@@ -227,22 +245,19 @@ class SlitherAnalyzer(BaseAnalyzer):
             vuln_type = SLITHER_CHECK_MAP.get(det.get("check", ""), VulnerabilityType.OTHER)
             elements = det.get("elements", [])
             location = None
+            skip = False
             if elements:
                 src = elements[0].get("source_mapping", {})
                 filename = src.get("filename_short") or src.get("filename_absolute") or ""
                 lines = src.get("lines") or []
                 if filename and lines:
                     location = f"{filename}:{lines[0]}"
-
-                # Filter: skip findings whose primary file is a dependency
                 if filename:
-                    if any(marker in filename for marker in _DEP_MARKERS):
-                        continue
-                    # If caller restricted to specific entry files, skip anything outside them
-                    if allowed is not None:
-                        fname_norm = filename.rsplit("/", 1)[-1]
-                        if filename not in allowed and fname_norm not in allowed:
-                            continue
+                    if _is_dep(filename) or not _is_allowed(filename):
+                        skip = True
+
+            if skip:
+                continue
 
             out.append(
                 FindingCreate(
