@@ -16,11 +16,12 @@ RUN npm install -g \
 
 ENV OZ_CONTRACTS_PATH=/usr/local/lib/node_modules/@openzeppelin
 
-# Install Foundry (forge + anvil) system-wide
-RUN curl -L https://foundry.paradigm.xyz | bash && /root/.foundry/bin/foundryup \
-    && ln -s /root/.foundry/bin/forge /usr/local/bin/forge \
-    && ln -s /root/.foundry/bin/anvil /usr/local/bin/anvil \
-    || echo "Foundry install skipped (no internet or CI)"
+# Install Foundry (forge + anvil) via direct binary download
+RUN curl -fsSL https://github.com/foundry-rs/foundry/releases/download/nightly/foundry_nightly_linux_amd64.tar.gz \
+    -o /tmp/foundry.tar.gz && \
+    tar -xzf /tmp/foundry.tar.gz -C /usr/local/bin forge anvil cast && \
+    chmod +x /usr/local/bin/forge /usr/local/bin/anvil /usr/local/bin/cast && \
+    rm /tmp/foundry.tar.gz
 
 RUN useradd -m -u 1000 app
 

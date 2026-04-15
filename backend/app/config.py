@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     # Analysis tool binaries
     slither_bin: str = "slither"
     mythril_bin: str = "myth"
-    echidna_bin: str = "echidna-test"
+    echidna_bin: str = "echidna"
     forge_bin: str = "forge"
     anvil_bin: str = "anvil"
 
