@@ -71,6 +71,8 @@ class MythrilAnalyzer(BaseAnalyzer):
             all_remaps = ([SOLC_REMAPPINGS] if SOLC_REMAPPINGS else []) + remappings
             if all_remaps:
                 cmd += ["--solc-remaps", " ".join(all_remaps)]
+            # Allow solc to resolve imports from anywhere inside tmpdir
+            cmd += ["--solc-args", f"--allow-paths {tmpdir}"]
 
             try:
                 result = run_sandboxed(cmd, timeout=self.timeout, cwd=str(tmp))
@@ -79,6 +81,11 @@ class MythrilAnalyzer(BaseAnalyzer):
 
             if result.timed_out:
                 raise AnalyzerError(f"mythril timed out after {self.timeout}s")
+
+            # Mythril exits 0 even when solc compilation fails — detect via stderr
+            stderr = result.stderr or ""
+            if any(kw in stderr.lower() for kw in ("fatal error", "file not found", "cannot find", "solc experienced")):
+                raise AnalyzerError(f"mythril compilation failed: {stderr[:400]}")
 
             stdout = result.stdout.strip()
             if not stdout:

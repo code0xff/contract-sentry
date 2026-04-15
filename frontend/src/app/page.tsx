@@ -130,8 +130,16 @@ export default function HomePage() {
   function loadFiles(files: File[]) {
     const sol = files.filter(f => f.name.endsWith('.sol'));
     if (!sol.length) return;
-    setAllFiles(sol);
-    setSelectedPaths(new Set(sol.map(getPath)));
+    setAllFiles(prev => {
+      const map = new Map(prev.map(f => [getPath(f), f]));
+      sol.forEach(f => map.set(getPath(f), f));
+      return Array.from(map.values());
+    });
+    setSelectedPaths(prev => {
+      const next = new Set(prev);
+      sol.forEach(f => next.add(getPath(f)));
+      return next;
+    });
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -210,6 +218,27 @@ export default function HomePage() {
     setError(null);
     try {
       const result = await compileCheck(uploadedContractId);
+
+      // Auto-match missing imports from already-loaded files by filename
+      if (result.missing.length > 0) {
+        const autoFiles: File[] = [];
+        const pathOverrides: Record<string, string> = {};
+        for (const missingPath of result.missing) {
+          const missingName = missingPath.split('/').pop()!;
+          const match = allFiles.find(f => f.name === missingName && !autoFiles.includes(f));
+          if (match) {
+            autoFiles.push(match);
+            pathOverrides[match.name] = missingPath;
+          }
+        }
+        if (autoFiles.length > 0) {
+          await addContractFiles(uploadedContractId, autoFiles, pathOverrides);
+          const updated = await compileCheck(uploadedContractId);
+          setCheckResult(updated);
+          return;
+        }
+      }
+
       setCheckResult(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Compile check failed');
@@ -401,9 +430,18 @@ export default function HomePage() {
                     </div>
 
                     {allFiles.length > 0 && (
-                      <FileSelector files={allFiles} selected={selectedPaths} onToggle={togglePath}
-                        onSelectAll={() => setSelectedPaths(new Set(allFiles.map(getPath)))}
-                        onDeselectAll={() => setSelectedPaths(new Set())} />
+                      <div className="space-y-2">
+                        <FileSelector files={allFiles} selected={selectedPaths} onToggle={togglePath}
+                          onSelectAll={() => setSelectedPaths(new Set(allFiles.map(getPath)))}
+                          onDeselectAll={() => setSelectedPaths(new Set())} />
+                        <input ref={extraFileInputRef} type="file" multiple accept=".sol" className="hidden"
+                          onChange={e => { loadFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
+                        <button type="button"
+                          onClick={() => extraFileInputRef.current?.click()}
+                          className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
+                          + Add more files
+                        </button>
+                      </div>
                     )}
 
                     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
