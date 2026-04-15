@@ -61,6 +61,7 @@ class Job(Base):
     contract_id: Mapped[str] = mapped_column(String(36), ForeignKey("contracts.id"))
     status: Mapped[JobStatus] = mapped_column(SAEnum(JobStatus), default=JobStatus.PENDING)
     tools: Mapped[list[str]] = mapped_column(JSON, default=list)
+    entry_files: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     progress: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     tool_errors: Mapped[dict | None] = mapped_column(JSON, nullable=True)

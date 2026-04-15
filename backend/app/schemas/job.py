@@ -21,6 +21,7 @@ class JobOut(BaseModel):
     contract_id: str
     status: JobStatus
     tools: list[str]
+    entry_files: list[str] | None = None
     progress: int
     error: str | None = None
     tool_errors: dict[str, str] | None = None

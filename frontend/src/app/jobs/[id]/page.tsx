@@ -169,6 +169,16 @@ export default function JobPage() {
               <p className="text-xs text-muted-foreground">Tools</p>
               {job.tools.join(', ')}
             </div>
+            {job.entry_files && job.entry_files.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground">Analyzed Files</p>
+                <ul className="mt-0.5 space-y-0.5">
+                  {job.entry_files.map(f => (
+                    <li key={f} className="font-mono text-xs">{f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div>
               <p className="text-xs text-muted-foreground">Progress</p>
               {job.progress}%

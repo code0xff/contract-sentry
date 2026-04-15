@@ -251,16 +251,18 @@ async def analyze_contract(
                 response.headers["x-cache"] = "HIT"
                 return cached_job
 
+    entry_files = payload.entry_files if payload else None
     job = Job(
         contract_id=contract.id,
         status=JobStatus.PENDING,
         tools=tool_values,
+        entry_files=entry_files,
         progress=0,
     )
     session.add(job)
     await session.commit()
     await session.refresh(job)
 
-    dispatch_job(job.id, contract.id, tool_values, entry_files=payload.entry_files if payload else None)
+    dispatch_job(job.id, contract.id, tool_values, entry_files=entry_files)
     # Cache write is deferred to the worker task after successful completion
     return job

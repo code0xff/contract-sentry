@@ -30,6 +30,7 @@ export interface Job {
   contract_id: string;
   status: JobStatus;
   tools: string[];
+  entry_files: string[] | null;
   progress: number;
   error: string | null;
   tool_errors: Record<string, string> | null;
