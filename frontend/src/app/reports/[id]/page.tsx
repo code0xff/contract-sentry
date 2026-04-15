@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getReport, getReportHtml, getReportMarkdown } from '@/lib/api';
+import { getReport, getReportMarkdown } from '@/lib/api';
 import type { Report } from '@/types';
 import { PageError, PageLoading } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
@@ -35,19 +35,23 @@ export default function ReportPage() {
   const [markdown, setMarkdown] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [htmlLoading, setHtmlLoading] = useState(false);
+  const [mdDownloading, setMdDownloading] = useState(false);
 
-  async function openHtml() {
-    setHtmlLoading(true);
+  async function downloadMarkdown() {
+    setMdDownloading(true);
     try {
-      const html = await getReportHtml(id);
-      const blob = new Blob([html], { type: 'text/html' });
+      const md = await getReportMarkdown(id);
+      const blob = new Blob([md], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `report-${id}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch {
       /* ignore */
     } finally {
-      setHtmlLoading(false);
+      setMdDownloading(false);
     }
   }
 
@@ -115,11 +119,11 @@ export default function ReportPage() {
             <TabsTrigger value="markdown">Full Report</TabsTrigger>
           </TabsList>
           <button
-            onClick={openHtml}
-            disabled={htmlLoading}
+            onClick={downloadMarkdown}
+            disabled={mdDownloading}
             className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-50"
           >
-            {htmlLoading ? 'Loading…' : 'HTML ↗'}
+            {mdDownloading ? 'Downloading…' : 'Download .md'}
           </button>
         </div>
 
