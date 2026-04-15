@@ -8,10 +8,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential git curl ca-certificates nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
-# Pre-install common Solidity libraries for import resolution
+# Pre-install common Solidity libraries + Claude CLI for AI campaign generation
 RUN npm install -g \
       @openzeppelin/contracts \
       @openzeppelin/contracts-upgradeable \
+      @anthropic-ai/claude-code \
     && rm -rf /root/.npm
 
 ENV OZ_CONTRACTS_PATH=/usr/local/lib/node_modules/@openzeppelin
