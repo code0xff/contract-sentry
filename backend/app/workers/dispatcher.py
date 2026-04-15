@@ -37,3 +37,17 @@ def dispatch_simulation(simulation_id: str, use_fork: bool) -> None:
         )
     except Exception as exc:  # pragma: no cover
         log.warning("dispatch_simulation_failed", simulation_id=simulation_id, error=str(exc))
+
+
+def dispatch_campaign(campaign_id: str) -> None:
+    try:
+        from app.workers.tasks.campaign import run_attack_campaign
+
+        run_attack_campaign.apply_async(
+            args=[campaign_id],
+            expires=7200,
+            retry=True,
+            retry_policy={"max_retries": 1, "interval_start": 60},
+        )
+    except Exception as exc:  # pragma: no cover
+        log.warning("dispatch_campaign_failed", campaign_id=campaign_id, error=str(exc))

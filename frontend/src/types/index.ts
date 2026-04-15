@@ -85,6 +85,29 @@ export interface Simulation {
   finished_at: string | null;
 }
 
+export type CampaignStatus =
+  | 'queued'
+  | 'planning'
+  | 'running'
+  | 'succeeded'
+  | 'partial'
+  | 'failed'
+  | 'timed_out';
+
+export interface AttackCampaign {
+  id: string;
+  job_id: string;
+  status: CampaignStatus;
+  attack_plan: string | null;
+  test_code: string | null;
+  output: string | null;
+  trace: string | null;
+  results: Record<string, 'pass' | 'fail'> | null;
+  error: string | null;
+  created_at: string;
+  finished_at: string | null;
+}
+
 export interface FindingDiff {
   new: Finding[];
   fixed: Finding[];

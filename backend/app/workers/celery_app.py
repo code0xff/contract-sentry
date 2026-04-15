@@ -35,6 +35,7 @@ celery_app = Celery(
         "app.workers.tasks.dynamic_analysis",
         "app.workers.tasks.simulation",
         "app.workers.tasks.report_generation",
+        "app.workers.tasks.campaign",
     ],
 )
 
@@ -51,6 +52,7 @@ celery_app.conf.update(
         "app.workers.tasks.dynamic_analysis.*": {"queue": DYNAMIC_ANALYSIS_QUEUE},
         "app.workers.tasks.simulation.*": {"queue": SIMULATION_QUEUE},
         "app.workers.tasks.report_generation.*": {"queue": REPORT_QUEUE},
+        "app.workers.tasks.campaign.*": {"queue": SIMULATION_QUEUE},
     },
     task_default_retry_delay=30,
     task_publish_retry=True,

@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
 from app.schemas.enums import (
+    CampaignStatus,
     ContractLanguage,
     JobStatus,
     ReportStatus,
@@ -78,6 +79,9 @@ class Job(Base):
     )
     simulations: Mapped[list["SimulationRun"]] = relationship(
         "SimulationRun", back_populates="job", cascade="all, delete-orphan"
+    )
+    campaign: Mapped["AttackCampaign | None"] = relationship(
+        "AttackCampaign", back_populates="job", uselist=False, cascade="all, delete-orphan"
     )
 
 
@@ -150,6 +154,24 @@ class Report(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
 
     job: Mapped[Job] = relationship("Job", back_populates="report")
+
+
+class AttackCampaign(Base):
+    __tablename__ = "attack_campaigns"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    job_id: Mapped[str] = mapped_column(String(36), ForeignKey("jobs.id"), unique=True)
+    status: Mapped[CampaignStatus] = mapped_column(SAEnum(CampaignStatus), default=CampaignStatus.QUEUED)
+    attack_plan: Mapped[str | None] = mapped_column(Text, nullable=True)
+    test_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    output: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trace: Mapped[str | None] = mapped_column(Text, nullable=True)
+    results: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    job: Mapped[Job] = relationship("Job", back_populates="campaign")
 
 
 class User(Base):

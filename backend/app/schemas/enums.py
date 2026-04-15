@@ -62,6 +62,16 @@ class ReportStatus(str, Enum):
     READY = "ready"
 
 
+class CampaignStatus(str, Enum):
+    QUEUED    = "queued"
+    PLANNING  = "planning"
+    RUNNING   = "running"
+    SUCCEEDED = "succeeded"
+    PARTIAL   = "partial"
+    FAILED    = "failed"
+    TIMED_OUT = "timed_out"
+
+
 SEVERITY_ORDER: dict[Severity, int] = {
     Severity.CRITICAL: 5,
     Severity.HIGH: 4,

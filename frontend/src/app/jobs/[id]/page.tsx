@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { createSimulation, generateAiReport, generatePoc, getFindings, getJob, getJobReport } from '@/lib/api';
-import type { Finding, Job } from '@/types';
+import { createSimulation, generateAiReport, generatePoc, getCampaign, getFindings, getJob, getJobReport, triggerCampaign } from '@/lib/api';
+import type { AttackCampaign, CampaignStatus, Finding, Job } from '@/types';
 import { PageError, PageLoading } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,6 +26,18 @@ const SEVERITY_BORDER_L: Record<string, string> = {
   low:      'border-l-green-500',
   info:     'border-l-blue-500',
 };
+
+const CAMPAIGN_STATUS_BADGE: Record<CampaignStatus, string> = {
+  queued:    'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  planning:  'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  running:   'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  succeeded: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  partial:   'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  failed:    'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  timed_out: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400',
+};
+
+const CAMPAIGN_ACTIVE: CampaignStatus[] = ['queued', 'planning', 'running'];
 
 const STATUS_DOT: Record<string, string> = {
   pending:   'bg-amber-500',
@@ -58,6 +70,8 @@ export default function JobPage() {
   const [baselineInput, setBaselineInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [aiReportLoading, setAiReportLoading] = useState(false);
+  const [campaign, setCampaign] = useState<AttackCampaign | null>(null);
+  const [campaignLoading, setCampaignLoading] = useState(false);
 
   const loadJob = useCallback(async () => {
     try {
@@ -81,6 +95,35 @@ export default function JobPage() {
     const t = setInterval(loadJob, 3000);
     return () => clearInterval(t);
   }, [job, loadJob]);
+
+  // Load existing campaign when job completes
+  useEffect(() => {
+    if (job?.status === 'completed') {
+      getCampaign(id).then(setCampaign).catch(() => {/* no campaign yet */});
+    }
+  }, [id, job?.status]);
+
+  // Poll campaign while active
+  useEffect(() => {
+    if (!campaign || !CAMPAIGN_ACTIVE.includes(campaign.status)) return;
+    const t = setInterval(() => {
+      getCampaign(id).then(setCampaign).catch(() => undefined);
+    }, 3000);
+    return () => clearInterval(t);
+  }, [campaign, id]);
+
+  async function runCampaign() {
+    setCampaignLoading(true);
+    try {
+      const c = await triggerCampaign(id);
+      setCampaign(c);
+      toast.success('Attack campaign queued');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to start campaign');
+    } finally {
+      setCampaignLoading(false);
+    }
+  }
 
   async function runSimulation(finding: Finding) {
     setSimLoading(finding.id);
@@ -216,6 +259,18 @@ export default function JobPage() {
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Findings ({findings.length})</h2>
             <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={runCampaign}
+                disabled={campaignLoading || (!!campaign && CAMPAIGN_ACTIVE.includes(campaign.status))}
+              >
+                {campaignLoading || (campaign && CAMPAIGN_ACTIVE.includes(campaign.status))
+                  ? 'Campaign running…'
+                  : campaign
+                  ? 'Re-run Campaign'
+                  : 'Run Attack Campaign'}
+              </Button>
               <Button size="sm" variant="outline" onClick={downloadAiReport} disabled={aiReportLoading}>
                 {aiReportLoading ? 'Generating…' : 'Generate AI Report'}
               </Button>
@@ -294,6 +349,81 @@ export default function JobPage() {
               </Card>
             ))}
           </div>
+
+          {campaign && (
+            <Card className="mb-6">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center justify-between text-sm">
+                  <span>Attack Campaign</span>
+                  <span className={cn('rounded px-2 py-0.5 text-xs font-semibold', CAMPAIGN_STATUS_BADGE[campaign.status])}>
+                    {campaign.status}
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {CAMPAIGN_ACTIVE.includes(campaign.status) && (
+                  <p className={cn('text-sm', campaign.status === 'queued' ? 'text-muted-foreground' : 'text-blue-600 dark:text-blue-400')}>
+                    {campaign.status === 'queued' && 'Queued — waiting for worker…'}
+                    {campaign.status === 'planning' && 'AI is designing attack scenarios…'}
+                    {campaign.status === 'running' && 'Running forge test -vvv…'}
+                  </p>
+                )}
+
+                {campaign.results && Object.keys(campaign.results).length > 0 && (
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold">Test Results</p>
+                    <div className="flex flex-col gap-1">
+                      {Object.entries(campaign.results).map(([name, result]) => (
+                        <div
+                          key={name}
+                          className={cn(
+                            'flex items-center gap-2 rounded px-2 py-1 font-mono text-xs',
+                            result === 'pass'
+                              ? 'bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                              : 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-400',
+                          )}
+                        >
+                          <span>{result === 'pass' ? '✓' : '✗'}</span>
+                          <span>{name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {campaign.attack_plan && (
+                  <details>
+                    <summary className="cursor-pointer text-xs font-semibold">Attack Plan</summary>
+                    <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                      {campaign.attack_plan}
+                    </pre>
+                  </details>
+                )}
+
+                {campaign.test_code && (
+                  <details>
+                    <summary className="cursor-pointer text-xs font-semibold">Foundry Test Suite</summary>
+                    <pre className="mt-2 overflow-x-auto rounded-md bg-zinc-900 p-4 text-xs text-zinc-100 dark:bg-zinc-950">
+                      {campaign.test_code}
+                    </pre>
+                  </details>
+                )}
+
+                {campaign.trace && (
+                  <details>
+                    <summary className="cursor-pointer text-xs font-semibold">Raw Trace</summary>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                      {campaign.trace}
+                    </pre>
+                  </details>
+                )}
+
+                {campaign.error && (
+                  <p className="text-xs text-destructive">{campaign.error}</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
