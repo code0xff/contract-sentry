@@ -121,6 +121,16 @@ class SlitherAnalyzer(BaseAnalyzer):
             cmd = [self.binary, str(target_dir), "--json", "-"]
             if remappings:
                 cmd += ["--solc-remaps", " ".join(remappings)]
+            # Exclude dependency paths (node_modules, @scope dirs, global oz) from findings
+            filter_parts = ["node_modules", "/usr/local/lib/node_modules"]
+            # Add any @scope dirs that exist directly in tmpdir (user-uploaded deps)
+            try:
+                for d in tmp.iterdir():
+                    if d.name.startswith("@") and d.is_dir():
+                        filter_parts.append(str(d))
+            except OSError:
+                pass
+            cmd += ["--filter-paths", "|".join(filter_parts)]
 
             try:
                 result = run_sandboxed(cmd, timeout=self.timeout, cwd=str(tmp))
