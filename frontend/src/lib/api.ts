@@ -168,12 +168,17 @@ export interface CompileCheckResult {
 export const compileCheck = (contractId: string): Promise<CompileCheckResult> =>
   request<CompileCheckResult>(`/api/v1/contracts/${contractId}/compile-check`, { method: 'POST' });
 
-export async function addContractFiles(contractId: string, files: File[]): Promise<Contract> {
+export async function addContractFiles(
+  contractId: string,
+  files: File[],
+  pathOverrides?: Record<string, string>,  // filename → resolved import path
+): Promise<Contract> {
   const form = new FormData();
   for (const file of files) {
-    const relativePath =
+    const defaultPath =
       (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
-    form.append('files', file, relativePath);
+    const resolvedPath = pathOverrides?.[file.name] ?? defaultPath;
+    form.append('files', file, resolvedPath);
   }
   const res = await fetch(`${BASE}/api/v1/contracts/${contractId}/files`, {
     method: 'PATCH',

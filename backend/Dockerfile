@@ -10,8 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     npm \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code CLI for AI PoC generation
-RUN npm install -g @anthropic-ai/claude-code && rm -rf /root/.npm
+# Install Claude Code CLI for AI PoC generation + common Solidity libraries
+RUN npm install -g \
+      @anthropic-ai/claude-code \
+      @openzeppelin/contracts \
+      @openzeppelin/contracts-upgradeable \
+    && rm -rf /root/.npm
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { createSimulation, generatePoc, getFindings, getJob, getJobReport } from '@/lib/api';
 import type { Finding, Job } from '@/types';
-import { ActionAlert, PageError, PageLoading } from '@/components/page-state';
+import { PageError, PageLoading } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -45,8 +46,6 @@ function SeverityBadge({ severity }: { severity: string }) {
   );
 }
 
-type ActionMsg = { type: 'success' | 'error'; text: string } | null;
-
 export default function JobPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -56,9 +55,6 @@ export default function JobPage() {
   const [simLoading, setSimLoading] = useState<string | null>(null);
   const [pocLoading, setPocLoading] = useState<string | null>(null);
   const [pocCode, setPocCode] = useState<Record<string, string>>({});
-  const [pocError, setPocError] = useState<Record<string, string>>({});
-  const [simMsg, setSimMsg] = useState<ActionMsg>(null);
-  const [reportMsg, setReportMsg] = useState<ActionMsg>(null);
   const [baselineInput, setBaselineInput] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -87,12 +83,11 @@ export default function JobPage() {
 
   async function runSimulation(finding: Finding) {
     setSimLoading(finding.id);
-    setSimMsg(null);
     try {
       const sim = await createSimulation(id, { template: finding.vulnerability_type, finding_id: finding.id });
-      setSimMsg({ type: 'success', text: `Simulation queued (ID: ${sim.id}) — status: ${sim.status}` });
+      toast.success(`Simulation queued — status: ${sim.status}`, { description: `ID: ${sim.id}` });
     } catch (err: unknown) {
-      setSimMsg({ type: 'error', text: err instanceof Error ? err.message : 'Failed to queue simulation' });
+      toast.error(err instanceof Error ? err.message : 'Failed to queue simulation');
     } finally {
       setSimLoading(null);
     }
@@ -100,27 +95,25 @@ export default function JobPage() {
 
   async function runGeneratePoc(finding: Finding) {
     setPocLoading(finding.id);
-    setPocError(prev => { const n = { ...prev }; delete n[finding.id]; return n; });
     try {
       const result = await generatePoc(id, finding.id);
       setPocCode(prev => ({ ...prev, [finding.id]: result.poc }));
+      toast.success('PoC generated');
     } catch (err: unknown) {
-      setPocError(prev => ({
-        ...prev,
-        [finding.id]: err instanceof Error ? err.message : 'Failed to generate PoC',
-      }));
+      const msg = err instanceof Error ? err.message : 'Failed to generate PoC';
+      toast.error(msg);
+      setPocCode(prev => ({ ...prev, [finding.id]: `// Error: ${msg}` }));
     } finally {
       setPocLoading(null);
     }
   }
 
   async function viewReport() {
-    setReportMsg(null);
     try {
       const report = await getJobReport(id);
       router.push(`/reports/${report.id}`);
     } catch {
-      setReportMsg({ type: 'error', text: 'Report is not ready yet — please try again in a moment.' });
+      toast.error('Report is not ready yet — please try again in a moment.');
     }
   }
 
@@ -197,18 +190,6 @@ export default function JobPage() {
             </Button>
           </div>
 
-          {reportMsg && (
-            <div className="mb-4">
-              <ActionAlert message={reportMsg.text} type={reportMsg.type} onClose={() => setReportMsg(null)} />
-            </div>
-          )}
-
-          {simMsg && (
-            <div className="mb-4">
-              <ActionAlert message={simMsg.text} type={simMsg.type} onClose={() => setSimMsg(null)} />
-            </div>
-          )}
-
           {job.tool_errors && Object.keys(job.tool_errors).length > 0 && (
             <div className="mb-4 rounded-md border border-yellow-300 bg-yellow-50 px-4 py-3 dark:border-yellow-800 dark:bg-yellow-950/30">
               <p className="mb-1 text-sm font-semibold text-yellow-800 dark:text-yellow-400">
@@ -269,11 +250,6 @@ export default function JobPage() {
                     {f.location && ` · ${f.location}`}
                   </p>
                   <p className="text-sm">{f.description}</p>
-                  {pocError[f.id] && (
-                    <div className="mt-3 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                      PoC generation failed: {pocError[f.id]}
-                    </div>
-                  )}
                   {pocCode[f.id] && (
                     <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-zinc-900 p-4 text-xs text-zinc-100 dark:bg-zinc-950">
                       {pocCode[f.id]}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { deleteContract, listContracts } from '@/lib/api';
 import type { Contract } from '@/types';
 import { PageError, PageLoading } from '@/components/page-state';
@@ -40,8 +41,9 @@ export default function ContractListPage() {
     try {
       await deleteContract(id);
       setContracts(prev => prev.filter(c => c.id !== id));
+      toast.success('Contract deleted');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Delete failed');
+      toast.error(err instanceof Error ? err.message : 'Delete failed');
     } finally {
       setDeleting(null);
     }

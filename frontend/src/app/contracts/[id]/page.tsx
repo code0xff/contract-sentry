@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Trash2 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { analyzeContract, deleteContract, deleteJob, getContract, listContractJobs } from '@/lib/api';
 import type { Contract, Job } from '@/types';
-import { ActionAlert, PageError, PageLoading } from '@/components/page-state';
+import { PageError, PageLoading } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -49,7 +50,6 @@ export default function ContractDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [selectedTools, setSelectedTools] = useState<string[]>(['slither', 'mythril']);
   const [deletingJob, setDeletingJob] = useState<string | null>(null);
 
@@ -81,9 +81,10 @@ export default function ContractDetailPage() {
     if (!confirm(`Delete "${contract.name}" and all its analyses? This cannot be undone.`)) return;
     try {
       await deleteContract(contract.id);
+      toast.success(`"${contract.name}" deleted`);
       router.push('/contracts');
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Delete failed');
+      toast.error(e instanceof Error ? e.message : 'Delete failed');
     }
   }
 
@@ -95,8 +96,9 @@ export default function ContractDetailPage() {
     try {
       await deleteJob(jobId);
       setJobs(prev => prev.filter(j => j.id !== jobId));
+      toast.success('Job deleted');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Delete failed');
+      toast.error(err instanceof Error ? err.message : 'Delete failed');
     } finally {
       setDeletingJob(null);
     }
@@ -105,12 +107,11 @@ export default function ContractDetailPage() {
   async function startAnalysis() {
     if (!contract || selectedTools.length === 0) return;
     setAnalyzing(true);
-    setAnalyzeError(null);
     try {
       const job = await analyzeContract(contract.id, selectedTools);
       router.push(`/jobs/${job.id}`);
     } catch (e) {
-      setAnalyzeError(e instanceof Error ? e.message : 'Failed to start analysis');
+      toast.error(e instanceof Error ? e.message : 'Failed to start analysis');
       setAnalyzing(false);
     }
   }
@@ -173,15 +174,6 @@ export default function ContractDetailPage() {
               </Button>
             </div>
           </div>
-          {analyzeError && (
-            <div className="mt-4">
-              <ActionAlert
-                message={analyzeError}
-                type="error"
-                onClose={() => setAnalyzeError(null)}
-              />
-            </div>
-          )}
         </CardContent>
       </Card>
 

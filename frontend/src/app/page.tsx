@@ -200,7 +200,15 @@ export default function HomePage() {
     setCheckLoading(true);
     setError(null);
     try {
-      await addContractFiles(uploadedContractId, files);
+      // Auto-match uploaded filenames to missing import paths
+      // e.g. ISemver.sol → @universal/interfaces/ISemver.sol
+      const missing = checkResult?.missing ?? [];
+      const pathOverrides: Record<string, string> = {};
+      for (const file of files) {
+        const match = missing.find(m => m.split('/').pop() === file.name);
+        if (match) pathOverrides[file.name] = match;
+      }
+      await addContractFiles(uploadedContractId, files, pathOverrides);
       const result = await compileCheck(uploadedContractId);
       setCheckResult(result);
     } catch (err) {

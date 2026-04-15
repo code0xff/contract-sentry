@@ -78,19 +78,38 @@ def resolve_npm_deps(tmpdir: Path, files: dict[str, str]) -> None:
 
 
 def build_solc_remappings(tmpdir: Path) -> list[str]:
-    """Build ``@pkg=path`` remapping strings for slither/solc from all available node_modules."""
+    """Build ``@pkg=path`` remapping strings for slither/solc from available node_modules.
+
+    Only includes packages that actually contain .sol files to avoid passing
+    unrelated npm packages (e.g. CLI tools) to the Solidity compiler.
+    """
     remappings: list[str] = []
+    seen: set[str] = set()
+
     for search_root in (tmpdir / "node_modules", _GLOBAL_NODE_MODULES):
         if not search_root.exists():
             continue
-        # Handle both @scope/pkg and plain pkg directories
         for entry in search_root.iterdir():
             if entry.name.startswith("@"):
                 for sub in entry.iterdir():
-                    remappings.append(f"@{entry.name[1:]}/{sub.name}={sub}")
+                    key = f"@{entry.name[1:]}/{sub.name}"
+                    if key not in seen and _has_sol_files(sub):
+                        remappings.append(f"{key}={sub}")
+                        seen.add(key)
             else:
-                remappings.append(f"{entry.name}={entry}")
+                key = entry.name
+                if key not in seen and _has_sol_files(entry):
+                    remappings.append(f"{key}={entry}")
+                    seen.add(key)
     return remappings
+
+
+def _has_sol_files(path: Path) -> bool:
+    """Return True if the directory contains at least one .sol file (non-recursive check)."""
+    try:
+        return any(True for _ in path.rglob("*.sol"))
+    except (OSError, PermissionError):
+        return False
 
 
 class AnalyzerError(RuntimeError):

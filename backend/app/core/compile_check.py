@@ -74,32 +74,42 @@ def _run_via_solcx(
     except ImportError:
         return None
 
+    # Select solc version: try pragma-specific install, fall back to any installed
     try:
-        # Install / select the right solc version for this pragma
         if pragma:
             try:
                 version = solcx.install_solc_pragma(pragma, show_progress=False)
                 solcx.set_solc_version(version, silent=True)
             except Exception:
                 versions = solcx.get_installed_solc_versions()
-                if versions:
-                    solcx.set_solc_version(versions[0], silent=True)
-                else:
-                    solcx.install_solc("latest", show_progress=False)
+                if not versions:
+                    return None
+                solcx.set_solc_version(versions[0], silent=True)
         else:
             versions = solcx.get_installed_solc_versions()
             if not versions:
-                solcx.install_solc("latest", show_progress=False)
+                return None
+            solcx.set_solc_version(versions[0], silent=True)
+    except Exception:
+        return None
 
+    # allow_paths: tmpdir + node_modules roots
+    allow_paths = [str(tmp)]
+    for nm in (tmp / "node_modules", Path("/usr/local/lib/node_modules")):
+        if nm.exists():
+            allow_paths.append(str(nm))
+
+    # Run compilation; SolcError.stderr_data has the raw compiler messages
+    try:
         solcx.compile_files(
             sol_files,
-            remappings=remappings or None,
-            allow_paths=[str(tmp)],
+            import_remappings=remappings or None,
+            allow_paths=allow_paths,
             output_values=["abi"],
         )
-        return ""  # success — no output means no errors
+        return ""  # success
     except Exception as exc:
-        return str(exc)
+        return getattr(exc, "stderr_data", None) or str(exc)
 
 
 def _run_system_solc(tmp: Path, remappings: list[str], sol_files: list[str]) -> str | None:
