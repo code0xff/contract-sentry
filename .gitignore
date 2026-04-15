@@ -42,3 +42,6 @@ Thumbs.db
 # Project state
 .claude/state/intents/
 .omc/
+
+# Generated analysis artifacts
+backend/crytic-export/
