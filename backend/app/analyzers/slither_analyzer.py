@@ -160,7 +160,7 @@ class SlitherAnalyzer(BaseAnalyzer):
                 err = data.get("error") or result.stderr or "compilation failed"
                 raise AnalyzerError(f"slither compilation failed: {err[:400]}")
 
-            return self._normalize(data)
+            return self._normalize(data, entry_files=entry_files)
 
     def analyze(self, source: str) -> list[FindingCreate]:
         if not source:
@@ -204,7 +204,22 @@ class SlitherAnalyzer(BaseAnalyzer):
 
             return self._normalize(data)
 
-    def _normalize(self, data: dict[str, Any]) -> list[FindingCreate]:
+    def _normalize(
+        self,
+        data: dict[str, Any],
+        entry_files: list[str] | None = None,
+    ) -> list[FindingCreate]:
+        # Build a set of normalised stems to match against filename_short.
+        # e.g. entry_files=["src/SponsorFund.sol"] → {"src/SponsorFund.sol", "SponsorFund.sol"}
+        allowed: set[str] | None = None
+        if entry_files:
+            allowed = set()
+            for p in entry_files:
+                allowed.add(p)
+                allowed.add(p.rsplit("/", 1)[-1])
+
+        _DEP_MARKERS = ("node_modules", "/usr/local/lib/node_modules")
+
         out: list[FindingCreate] = []
         results = data.get("results", {}).get("detectors", []) if isinstance(data, dict) else []
         for det in results:
@@ -218,6 +233,17 @@ class SlitherAnalyzer(BaseAnalyzer):
                 lines = src.get("lines") or []
                 if filename and lines:
                     location = f"{filename}:{lines[0]}"
+
+                # Filter: skip findings whose primary file is a dependency
+                if filename:
+                    if any(marker in filename for marker in _DEP_MARKERS):
+                        continue
+                    # If caller restricted to specific entry files, skip anything outside them
+                    if allowed is not None:
+                        fname_norm = filename.rsplit("/", 1)[-1]
+                        if filename not in allowed and fname_norm not in allowed:
+                            continue
+
             out.append(
                 FindingCreate(
                     tool=ToolName.SLITHER,
