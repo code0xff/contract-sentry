@@ -56,8 +56,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = HTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"Claude proxy listening on port {PORT} — Ctrl+C to stop")
+    server = HTTPServer(("0.0.0.0", PORT), Handler)
+    print(f"Claude proxy listening on 0.0.0.0:{PORT} — Ctrl+C to stop")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
