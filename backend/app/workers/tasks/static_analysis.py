@@ -42,6 +42,8 @@ async def _run(job_id: str, contract_id: str, tools: list[str], entry_files: lis
         if contract.project_files:
             try:
                 project_files = _json.loads(contract.project_files)
+                from app.analyzers.base import auto_alias_by_basename
+                project_files = auto_alias_by_basename(project_files)
             except Exception:
                 log.warning("invalid_project_files_json", contract_id=contract_id)
 

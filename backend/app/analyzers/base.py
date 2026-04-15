@@ -132,6 +132,36 @@ def build_solc_remappings(tmpdir: Path) -> list[str]:
     return remappings
 
 
+_IMPORT_RE = re.compile(r"""import\s+(?:[^"']*?\s+)?["']([^"']+)["']""")
+
+
+def auto_alias_by_basename(files: dict[str, str]) -> dict[str, str]:
+    """Add path aliases so that import paths whose basename matches an existing
+    file are resolvable even when the upload created broken path prefixes.
+
+    Example: uploaded files {"universal/interfaces/ISemver.sol": "..."} but
+    imports reference "@universal/interfaces/ISemver.sol" → adds that key.
+    """
+    # Build a basename → existing_path map (last writer wins for duplicates)
+    basename_map: dict[str, str] = {p.rsplit("/", 1)[-1]: p for p in files}
+
+    aliases: dict[str, str] = {}
+    for content in list(files.values()):
+        for m in _IMPORT_RE.finditer(content):
+            raw = m.group(1)
+            if raw in files or raw in aliases:
+                continue
+            basename = raw.rsplit("/", 1)[-1]
+            if basename in basename_map:
+                aliases[raw] = files[basename_map[basename]]
+
+    if aliases:
+        result = dict(files)
+        result.update(aliases)
+        return result
+    return files
+
+
 def _has_sol_files(path: Path) -> bool:
     """Return True if the directory contains at least one .sol file (non-recursive check)."""
     try:
