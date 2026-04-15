@@ -160,7 +160,9 @@ class SlitherAnalyzer(BaseAnalyzer):
                 err = data.get("error") or result.stderr or "compilation failed"
                 raise AnalyzerError(f"slither compilation failed: {err[:400]}")
 
-            return self._normalize(data, entry_files=entry_files)
+            # user_files = non-@scope keys (the files actually authored by user)
+            user_file_set = {p for p in files if p.endswith(".sol") and not p.startswith("@")}
+            return self._normalize(data, entry_files=entry_files, user_files=user_file_set)
 
     def analyze(self, source: str) -> list[FindingCreate]:
         if not source:
@@ -208,6 +210,7 @@ class SlitherAnalyzer(BaseAnalyzer):
         self,
         data: dict[str, Any],
         entry_files: list[str] | None = None,
+        user_files: set[str] | None = None,
     ) -> list[FindingCreate]:
         # Normalise entry file stems for matching against slither's filename_short.
         # Use suffix matching: filename_short may have extra prefixes depending on how
@@ -222,21 +225,35 @@ class SlitherAnalyzer(BaseAnalyzer):
 
         _DEP_MARKERS = ("node_modules",)
 
+        # Build suffix list for user_files so full-project analysis can also
+        # exclude dependency files that slipped past --filter-paths.
+        user_suffixes: list[str] | None = None
+        if user_files:
+            user_suffixes = []
+            for p in user_files:
+                user_suffixes.append(p.lstrip("./"))
+                user_suffixes.append(p.rsplit("/", 1)[-1])
+
         def _is_dep(fname: str) -> bool:
             """Return True if fname looks like a dependency, not a user file."""
             if any(m in fname for m in _DEP_MARKERS):
                 return True
             return False
 
-        def _is_allowed(fname: str) -> bool:
-            """Return True if fname matches one of the selected entry files."""
-            if allowed_suffixes is None:
-                return True
+        def _matches_suffixes(fname: str, suffixes: list[str]) -> bool:
             clean = fname.lstrip("./")
-            for suf in allowed_suffixes:
+            for suf in suffixes:
                 if clean == suf or clean.endswith("/" + suf):
                     return True
             return False
+
+        def _is_allowed(fname: str) -> bool:
+            """Return True if fname is from an entry file (or any user file when no selection)."""
+            if allowed_suffixes is not None:
+                return _matches_suffixes(fname, allowed_suffixes)
+            if user_suffixes is not None:
+                return _matches_suffixes(fname, user_suffixes)
+            return True
 
         out: list[FindingCreate] = []
         results = data.get("results", {}).get("detectors", []) if isinstance(data, dict) else []
