@@ -2,10 +2,21 @@
 from __future__ import annotations
 
 from celery import Celery
+from celery.signals import worker_process_init
 
 from app.config import get_settings
 
 settings = get_settings()
+
+
+@worker_process_init.connect
+def _reset_db_pool(**kwargs: object) -> None:
+    """Dispose the inherited connection pool after fork so each worker
+    process creates its own connections on a fresh event loop."""
+    from app.db.session import engine
+
+    engine.dispose()
+
 
 STATIC_ANALYSIS_QUEUE = "static_analysis"
 DYNAMIC_ANALYSIS_QUEUE = "dynamic_analysis"
