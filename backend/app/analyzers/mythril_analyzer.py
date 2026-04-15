@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from app.analyzers.base import AnalyzerError, BaseAnalyzer
+from app.analyzers.base import AnalyzerError, BaseAnalyzer, build_solc_remappings, resolve_npm_deps
 from app.config import get_settings
 from app.core.sandbox import SandboxError, run_sandboxed
 from app.schemas.enums import Severity, ToolName, VulnerabilityType
@@ -56,19 +56,21 @@ class MythrilAnalyzer(BaseAnalyzer):
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(content, encoding="utf-8")
 
-            # Use the first .sol file alphabetically as entry point
-            entry = str(tmp / sorted(files.keys())[0])
+            resolve_npm_deps(tmp, files)
+            remappings = build_solc_remappings(tmp)
+
+            # Use first user-owned .sol file (exclude @scope/ dependency dirs)
+            user_keys = [p for p in sorted(files.keys()) if p.endswith(".sol") and not p.startswith("@")]
+            entry_key = user_keys[0] if user_keys else sorted(files.keys())[0]
+            entry = str(tmp / entry_key)
+
+            cmd = [self.binary, "analyze", entry, "-o", "json"]
+            all_remaps = ([SOLC_REMAPPINGS] if SOLC_REMAPPINGS else []) + remappings
+            if all_remaps:
+                cmd += ["--solc-remaps", " ".join(all_remaps)]
 
             try:
-                result = run_sandboxed(
-                    [
-                        self.binary, "analyze", entry,
-                        "-o", "json",
-                        "--solc-remaps", SOLC_REMAPPINGS,
-                    ],
-                    timeout=self.timeout,
-                    cwd=str(tmp),
-                )
+                result = run_sandboxed(cmd, timeout=self.timeout, cwd=str(tmp))
             except SandboxError as exc:
                 raise AnalyzerError(f"mythril not available: {exc}") from exc
 
