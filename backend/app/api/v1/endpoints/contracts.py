@@ -222,6 +222,13 @@ async def add_contract_files(
                 f"file is not valid UTF-8: {rel_path!r}",
             ) from exc
 
+        # Remove stale root-level key with the same basename when a scoped path
+        # is added (e.g. adding "@universal/interfaces/ISemver.sol" cleans up
+        # any previously uploaded bare "ISemver.sol").
+        if "/" in rel_path:
+            basename = rel_path.rsplit("/", 1)[-1]
+            existing.pop(basename, None)
+
     contract.project_files = json.dumps(existing)
     await session.commit()
     await session.refresh(contract)

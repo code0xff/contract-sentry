@@ -156,6 +156,10 @@ class SlitherAnalyzer(BaseAnalyzer):
             except json.JSONDecodeError as exc:
                 raise AnalyzerError(f"slither emitted invalid JSON: {exc}") from exc
 
+            if not data.get("success", True):
+                err = data.get("error") or result.stderr or "compilation failed"
+                raise AnalyzerError(f"slither compilation failed: {err[:400]}")
+
             return self._normalize(data)
 
     def analyze(self, source: str) -> list[FindingCreate]:
@@ -193,6 +197,10 @@ class SlitherAnalyzer(BaseAnalyzer):
                 data = json.loads(result.stdout)
             except json.JSONDecodeError as exc:
                 raise AnalyzerError(f"slither emitted invalid JSON: {exc}") from exc
+
+            if not data.get("success", True):
+                err = data.get("error") or result.stderr or "compilation failed"
+                raise AnalyzerError(f"slither compilation failed: {err[:400]}")
 
             return self._normalize(data)
 
