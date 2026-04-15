@@ -79,7 +79,7 @@ class SlitherAnalyzer(BaseAnalyzer):
         self.binary = binary or settings.slither_bin
         self.timeout = timeout or settings.static_analysis_timeout_s
 
-    def analyze_files(self, files: dict[str, str]) -> list[FindingCreate]:
+    def analyze_files(self, files: dict[str, str], entry_files: list[str] | None = None) -> list[FindingCreate]:
         if not files:
             return []
 
@@ -101,13 +101,16 @@ class SlitherAnalyzer(BaseAnalyzer):
             # Build remappings from globally installed + locally installed packages
             remappings = build_solc_remappings(tmp)
 
-            # Target the common ancestor directory of user-owned files,
+            # Target the common ancestor directory of user-owned (or entry) files,
             # excluding @scope/ dependency dirs so slither doesn't try to
             # analyse pure interface-only packages ("No contract was analyzed").
             import os as _os
-            user_keys = [p for p in files if p.endswith(".sol") and not p.startswith("@")]
-            if user_keys:
-                common = _os.path.commonpath(user_keys)
+            if entry_files:
+                candidate_keys = [p for p in entry_files if p.endswith(".sol") and not p.startswith("@")]
+            else:
+                candidate_keys = [p for p in files if p.endswith(".sol") and not p.startswith("@")]
+            if candidate_keys:
+                common = _os.path.commonpath(candidate_keys)
                 common_path = Path(common)
                 # commonpath may return a file path when there's only one entry
                 if common_path.suffix:

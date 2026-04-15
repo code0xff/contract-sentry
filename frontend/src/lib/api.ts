@@ -76,11 +76,14 @@ export const listContractJobs = (contractId: string) =>
   request<Job[]>(`/api/v1/contracts/${contractId}/jobs`);
 
 // Jobs
-export const analyzeContract = (contractId: string, tools?: string[]) =>
+export const analyzeContract = (contractId: string, tools?: string[], entryFiles?: string[]) =>
   request<Job>(`/api/v1/contracts/${contractId}/analyze`, {
     method: 'POST',
-    body: JSON.stringify(tools ? { tools } : {}),
+    body: JSON.stringify(tools || entryFiles ? { ...(tools && { tools }), ...(entryFiles && { entry_files: entryFiles }) } : {}),
   });
+
+export const generateAiReport = (jobId: string) =>
+  request<{ markdown: string }>(`/api/v1/jobs/${jobId}/report/ai-markdown`, { method: 'POST' });
 
 export const getJob = (jobId: string) => request<Job>(`/api/v1/jobs/${jobId}`);
 

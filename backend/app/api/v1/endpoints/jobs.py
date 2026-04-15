@@ -160,6 +160,37 @@ async def diff_findings(
     )
 
 
+@router.post("/{job_id}/report/ai-markdown", status_code=200)
+async def generate_ai_markdown_report(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    """Generate an AI-powered markdown security audit report using Claude."""
+    from sqlalchemy import select as sa_select
+
+    from app.core.report_generator_ai import generate_ai_report
+    from app.schemas.job import JobOut
+
+    job = await session.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+
+    contract = await session.get(Contract, job.contract_id)
+    contract_name = contract.name if contract else "Unknown Contract"
+
+    result = await session.execute(
+        sa_select(Finding)
+        .where(Finding.job_id == job_id)
+        .options(selectinload(Finding.evidences))
+        .order_by(Finding.created_at.asc())
+    )
+    findings = [FindingOut.model_validate(f) for f in result.scalars().all()]
+
+    job_out = JobOut.model_validate(job)
+    markdown = await generate_ai_report(job_out, findings, contract_name)
+    return {"markdown": markdown}
+
+
 @router.post("/{job_id}/findings/{finding_id}/poc", status_code=200)
 async def generate_finding_poc(
     job_id: str,

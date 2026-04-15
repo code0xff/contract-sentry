@@ -11,6 +11,7 @@ class JobCreate(BaseModel):
     tools: list[ToolName] = Field(
         default_factory=lambda: [ToolName.SLITHER, ToolName.MYTHRIL]
     )
+    entry_files: list[str] | None = None  # relative paths e.g. ["src/Token.sol"]
 
 
 class JobOut(BaseModel):

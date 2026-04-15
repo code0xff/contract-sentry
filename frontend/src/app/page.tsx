@@ -120,6 +120,10 @@ export default function HomePage() {
   const [checkResult, setCheckResult] = useState<CompileCheckResult | null>(null);
   const [checkLoading, setCheckLoading] = useState(false);
 
+  // Entry file selection state
+  const [entryFiles, setEntryFiles] = useState<Set<string>>(new Set());
+  const [entryFilesReady, setEntryFilesReady] = useState(false);
+
   const toggleTool = (t: string) =>
     setTools(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
 
@@ -172,6 +176,8 @@ export default function HomePage() {
     setSelectedPaths(new Set());
     setUploadedContractId(null);
     setCheckResult(null);
+    setEntryFiles(new Set());
+    setEntryFilesReady(false);
   }
 
   async function handleFolderUpload(e: React.FormEvent) {
@@ -184,6 +190,12 @@ export default function HomePage() {
     try {
       const contract = await uploadContractFiles({ name: autoName, language: 'solidity', files: filesToUpload });
       setUploadedContractId(contract.id);
+      // Auto-select all user-owned files as entry points
+      const userOwned = filesToUpload
+        .map(f => getPath(f))
+        .filter(p => !p.startsWith('@'));
+      setEntryFiles(new Set(userOwned));
+      setEntryFilesReady(true);
       setCheckLoading(true);
       const result = await compileCheck(contract.id);
       setCheckResult(result);
@@ -223,7 +235,11 @@ export default function HomePage() {
     setLoading(true);
     setError(null);
     try {
-      const job = await analyzeContract(uploadedContractId, tools);
+      // Compute all user-owned files to determine if entry selection differs from default
+      const allUserOwned = allFiles.map(getPath).filter(p => !p.startsWith('@'));
+      const allSelected = allUserOwned.every(p => entryFiles.has(p)) && entryFiles.size === allUserOwned.length;
+      const entryFilesArg = (!allSelected && entryFiles.size > 0) ? [...entryFiles] : undefined;
+      const job = await analyzeContract(uploadedContractId, tools, entryFilesArg);
       router.push(`/jobs/${job.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed');
@@ -453,6 +469,41 @@ export default function HomePage() {
                             Compilation did not succeed. You can still proceed with analysis — tools may find partial results.
                           </p>
                         )}
+                      </div>
+                    )}
+
+                    {entryFilesReady && allFiles.filter(f => !getPath(f).startsWith('@')).length > 1 && (
+                      <div className="space-y-2">
+                        <Label>Entry point(s) for analysis</Label>
+                        <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/40 p-2 font-mono text-xs">
+                          {allFiles.filter(f => !getPath(f).startsWith('@')).map(f => {
+                            const path = getPath(f);
+                            const isChecked = entryFiles.has(path);
+                            return (
+                              <label
+                                key={path}
+                                className={cn(
+                                  'flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-muted',
+                                  isChecked ? 'text-foreground' : 'text-muted-foreground',
+                                )}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    setEntryFiles(prev => {
+                                      const next = new Set(prev);
+                                      next.has(path) ? next.delete(path) : next.add(path);
+                                      return next;
+                                    });
+                                  }}
+                                  className="shrink-0"
+                                />
+                                <span className="flex-1 truncate">{path}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
 

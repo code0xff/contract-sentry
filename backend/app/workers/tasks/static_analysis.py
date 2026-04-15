@@ -18,7 +18,7 @@ from app.workers.celery_app import celery_app
 log = get_logger(__name__)
 
 
-async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
+async def _run(job_id: str, contract_id: str, tools: list[str], entry_files: list[str] | None = None) -> None:
     from app.models.domain import Contract  # local import for tests
 
     # Capture source inside the session block to avoid detached-instance access
@@ -52,10 +52,10 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
             try:
                 if tool == ToolName.SLITHER.value:
                     analyzer_s = SlitherAnalyzer()
-                    findings = analyzer_s.analyze_files(project_files) if project_files else analyzer_s.analyze(source)
+                    findings = analyzer_s.analyze_files(project_files, entry_files=entry_files) if project_files else analyzer_s.analyze(source)
                 elif tool == ToolName.MYTHRIL.value:
                     analyzer_m = MythrilAnalyzer()
-                    findings = analyzer_m.analyze_files(project_files) if project_files else analyzer_m.analyze(source)
+                    findings = analyzer_m.analyze_files(project_files, entry_files=entry_files) if project_files else analyzer_m.analyze(source)
                 elif tool == ToolName.ECHIDNA.value:
                     if bytecode_only:
                         log.info("echidna_skipped_bytecode_only", job_id=job_id)
@@ -64,7 +64,7 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
                         from app.analyzers.echidna_analyzer import EchidnaAnalyzer
 
                         analyzer_e = EchidnaAnalyzer()
-                        findings = analyzer_e.analyze_files(project_files) if project_files else analyzer_e.analyze(source)
+                        findings = analyzer_e.analyze_files(project_files, entry_files=entry_files) if project_files else analyzer_e.analyze(source)
                 elif tool == ToolName.MEDUSA.value:
                     if bytecode_only:
                         log.info("medusa_skipped_bytecode_only", job_id=job_id)
@@ -73,7 +73,7 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
                         from app.analyzers.medusa_analyzer import MedusaAnalyzer
 
                         analyzer_med = MedusaAnalyzer()
-                        findings = analyzer_med.analyze_files(project_files) if project_files else analyzer_med.analyze(source)
+                        findings = analyzer_med.analyze_files(project_files, entry_files=entry_files) if project_files else analyzer_med.analyze(source)
                 else:
                     findings = []
                 JOB_TOTAL.labels(tool=tool, status="ok").inc()
@@ -141,10 +141,10 @@ async def _run(job_id: str, contract_id: str, tools: list[str]) -> None:
     max_retries=3,
     default_retry_delay=30,
 )
-def run_analysis_job(self, job_id: str, contract_id: str, tools: list[str]) -> None:
+def run_analysis_job(self, job_id: str, contract_id: str, tools: list[str], entry_files: list[str] | None = None) -> None:
     start = datetime.now(tz=timezone.utc)
     try:
-        asyncio.run(_run(job_id, contract_id, tools))
+        asyncio.run(_run(job_id, contract_id, tools, entry_files))
     except Exception as exc:
         log.error("analysis_job_failed", job_id=job_id, error=str(exc))
         raise self.retry(exc=exc)

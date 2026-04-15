@@ -261,6 +261,6 @@ async def analyze_contract(
     await session.commit()
     await session.refresh(job)
 
-    dispatch_job(job.id, contract.id, tool_values)
+    dispatch_job(job.id, contract.id, tool_values, entry_files=payload.entry_files if payload else None)
     # Cache write is deferred to the worker task after successful completion
     return job

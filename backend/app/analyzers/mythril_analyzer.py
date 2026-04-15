@@ -45,7 +45,7 @@ class MythrilAnalyzer(BaseAnalyzer):
         self.binary = binary or settings.mythril_bin
         self.timeout = timeout or settings.static_analysis_timeout_s
 
-    def analyze_files(self, files: dict[str, str]) -> list[FindingCreate]:
+    def analyze_files(self, files: dict[str, str], entry_files: list[str] | None = None) -> list[FindingCreate]:
         if not files:
             return []
 
@@ -59,9 +59,12 @@ class MythrilAnalyzer(BaseAnalyzer):
             resolve_npm_deps(tmp, files)
             remappings = build_solc_remappings(tmp)
 
-            # Use first user-owned .sol file (exclude @scope/ dependency dirs)
-            user_keys = [p for p in sorted(files.keys()) if p.endswith(".sol") and not p.startswith("@")]
-            entry_key = user_keys[0] if user_keys else sorted(files.keys())[0]
+            # Use first entry_file when provided; otherwise first user-owned .sol file
+            if entry_files:
+                candidate_keys = [p for p in entry_files if p.endswith(".sol") and not p.startswith("@")]
+            else:
+                candidate_keys = [p for p in sorted(files.keys()) if p.endswith(".sol") and not p.startswith("@")]
+            entry_key = candidate_keys[0] if candidate_keys else sorted(files.keys())[0]
             entry = str(tmp / entry_key)
 
             cmd = [self.binary, "analyze", entry, "-o", "json"]

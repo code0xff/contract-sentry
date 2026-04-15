@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { createSimulation, generatePoc, getFindings, getJob, getJobReport } from '@/lib/api';
+import { createSimulation, generateAiReport, generatePoc, getFindings, getJob, getJobReport } from '@/lib/api';
 import type { Finding, Job } from '@/types';
 import { PageError, PageLoading } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
@@ -57,6 +57,7 @@ export default function JobPage() {
   const [pocCode, setPocCode] = useState<Record<string, string>>({});
   const [baselineInput, setBaselineInput] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [aiReportLoading, setAiReportLoading] = useState(false);
 
   const loadJob = useCallback(async () => {
     try {
@@ -114,6 +115,25 @@ export default function JobPage() {
       router.push(`/reports/${report.id}`);
     } catch {
       toast.error('Report is not ready yet — please try again in a moment.');
+    }
+  }
+
+  async function downloadAiReport() {
+    setAiReportLoading(true);
+    try {
+      const { markdown } = await generateAiReport(id);
+      const blob = new Blob([markdown], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-report-${id}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('AI report downloaded');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to generate AI report');
+    } finally {
+      setAiReportLoading(false);
     }
   }
 
@@ -185,9 +205,14 @@ export default function JobPage() {
         <>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Findings ({findings.length})</h2>
-            <Button size="sm" onClick={viewReport}>
-              View Report
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={downloadAiReport} disabled={aiReportLoading}>
+                {aiReportLoading ? 'Generating…' : 'Generate AI Report'}
+              </Button>
+              <Button size="sm" onClick={viewReport}>
+                View Report
+              </Button>
+            </div>
           </div>
 
           {job.tool_errors && Object.keys(job.tool_errors).length > 0 && (

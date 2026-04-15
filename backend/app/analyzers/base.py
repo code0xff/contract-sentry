@@ -143,10 +143,14 @@ class BaseAnalyzer(abc.ABC):
         """Run the analyzer on a single source string and return normalized findings."""
 
     @abc.abstractmethod
-    def analyze_files(self, files: dict[str, str]) -> list[FindingCreate]:
+    def analyze_files(self, files: dict[str, str], entry_files: list[str] | None = None) -> list[FindingCreate]:
         """Run the analyzer on a multi-file project.
 
         Args:
             files: Mapping of relative path → source content,
                    e.g. {"contracts/Token.sol": "...", "lib/Ownable.sol": "..."}.
+            entry_files: Optional list of relative paths to use as analysis entry points.
+                         When provided, only these files are used to determine the analysis
+                         target (common ancestor dir or entry point file). Defaults to all
+                         user-owned (non-@scope) files.
         """

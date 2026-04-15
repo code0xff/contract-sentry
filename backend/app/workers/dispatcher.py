@@ -11,12 +11,12 @@ from app.core.logging import get_logger
 log = get_logger(__name__)
 
 
-def dispatch_job(job_id: str, contract_id: str, tools: list[str]) -> None:
+def dispatch_job(job_id: str, contract_id: str, tools: list[str], entry_files: list[str] | None = None) -> None:
     try:
         from app.workers.tasks.static_analysis import run_analysis_job
 
         run_analysis_job.apply_async(
-            args=[job_id, contract_id, tools],
+            args=[job_id, contract_id, tools, entry_files],
             expires=3600,
             retry=True,
             retry_policy={"max_retries": 3, "interval_start": 30},

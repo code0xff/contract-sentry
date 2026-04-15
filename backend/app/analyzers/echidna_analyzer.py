@@ -22,7 +22,7 @@ class EchidnaAnalyzer(BaseAnalyzer):
         self.binary = binary or settings.echidna_bin
         self.timeout = timeout or settings.dynamic_analysis_timeout_s
 
-    def analyze_files(self, files: dict[str, str]) -> list[FindingCreate]:
+    def analyze_files(self, files: dict[str, str], entry_files: list[str] | None = None) -> list[FindingCreate]:
         if not files:
             return []
 
