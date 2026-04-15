@@ -37,17 +37,13 @@ export default function ReportPage() {
   const [error, setError] = useState<string | null>(null);
   const [mdDownloading, setMdDownloading] = useState(false);
 
-  async function downloadMarkdown() {
+  async function openMarkdown() {
     setMdDownloading(true);
     try {
       const md = await getReportMarkdown(id);
-      const blob = new Blob([md], { type: 'text/markdown' });
+      const blob = new Blob([md], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `report-${id}.md`;
-      a.click();
-      URL.revokeObjectURL(url);
+      window.open(url, '_blank');
     } catch {
       /* ignore */
     } finally {
@@ -119,11 +115,11 @@ export default function ReportPage() {
             <TabsTrigger value="markdown">Full Report</TabsTrigger>
           </TabsList>
           <button
-            onClick={downloadMarkdown}
+            onClick={openMarkdown}
             disabled={mdDownloading}
             className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-50"
           >
-            {mdDownloading ? 'Downloading…' : 'Download .md'}
+            {mdDownloading ? 'Loading…' : 'Markdown ↗'}
           </button>
         </div>
 

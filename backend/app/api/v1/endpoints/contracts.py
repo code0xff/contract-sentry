@@ -175,7 +175,31 @@ async def compile_check_contract(
     from app.core.compile_check import check_compilation  # local import — heavy deps
 
     files: dict[str, str] = json.loads(contract.project_files)
-    return check_compilation(files)
+    result = check_compilation(files)
+
+    # Auto-resolve missing imports by basename match within existing project_files.
+    # e.g. missing "@universal/interfaces/ISemver.sol" → find existing "universal/interfaces/ISemver.sol"
+    # or "ISemver.sol" and alias it at the expected import path.
+    if result.get("missing"):
+        basename_map: dict[str, str] = {}
+        for path in files:
+            basename_map[path.rsplit("/", 1)[-1]] = path  # last one wins for dupes
+
+        auto_resolved: dict[str, str] = {}
+        for missing_path in result["missing"]:
+            if missing_path in files:
+                continue
+            basename = missing_path.rsplit("/", 1)[-1]
+            if basename in basename_map:
+                auto_resolved[missing_path] = files[basename_map[basename]]
+
+        if auto_resolved:
+            files.update(auto_resolved)
+            contract.project_files = json.dumps(files)
+            await session.commit()
+            result = check_compilation(files)
+
+    return result
 
 
 @router.patch("/{contract_id}/files", response_model=ContractOut)
