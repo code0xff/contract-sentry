@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.core.campaign_generator import generate_campaign
@@ -51,21 +52,30 @@ async def _run(campaign_id: str) -> None:
         campaign.status = CampaignStatus.PLANNING
         job_id = campaign.job_id
 
+    contract_source: str | None = None
+    project_files: dict[str, str] | None = None
+    contract_name = "Unknown"
+    findings: list[FindingOut] = []
+
     async with session_scope() as session:
         job = await session.get(Job, job_id)
         contract = await session.get(Contract, job.contract_id)
-        result = await session.execute(select(Finding).where(Finding.job_id == job_id))
+        result = await session.execute(
+            select(Finding)
+            .where(Finding.job_id == job_id)
+            .options(selectinload(Finding.evidences))
+        )
         findings_db = list(result.scalars().all())
-
-    findings = [FindingOut.model_validate(f) for f in findings_db]
-    contract_source = contract.source if contract else None
-    project_files: dict[str, str] | None = None
-    if contract and contract.project_files:
-        try:
-            project_files = json.loads(contract.project_files)
-        except (json.JSONDecodeError, TypeError):
-            pass
-    contract_name = contract.name if contract else "Unknown"
+        # Validate while session is open to avoid DetachedInstanceError on evidences
+        findings = [FindingOut.model_validate(f) for f in findings_db]
+        if contract:
+            contract_source = contract.source
+            contract_name = contract.name
+            if contract.project_files:
+                try:
+                    project_files = json.loads(contract.project_files)
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
     # ── Phase 2: AI generates attack plan + test suite ────────────────────
     try:
