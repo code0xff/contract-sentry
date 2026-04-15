@@ -60,6 +60,7 @@ def resolve_npm_deps(tmpdir: Path, files: dict[str, str]) -> None:
         pkg for pkg in packages
         if not (_GLOBAL_NODE_MODULES / pkg).exists()
         and not (tmpdir / "node_modules" / pkg).exists()
+        and not (tmpdir / pkg).exists()  # user uploaded the package directly
     ]
 
     if not to_install:
