@@ -108,6 +108,12 @@ export interface AttackCampaign {
   finished_at: string | null;
 }
 
+export interface AttackCampaignListItem extends AttackCampaign {
+  contract_id: string | null;
+  contract_name: string | null;
+  tools: string[] | null;
+}
+
 export interface FindingDiff {
   new: Finding[];
   fixed: Finding[];

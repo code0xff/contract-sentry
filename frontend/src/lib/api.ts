@@ -1,4 +1,4 @@
-import type { AttackCampaign, Contract, Finding, FindingDiff, Job, Report, Simulation } from '@/types/index';
+import type { AttackCampaign, AttackCampaignListItem, Contract, Finding, FindingDiff, Job, Report, Simulation } from '@/types/index';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -130,6 +130,12 @@ export const triggerCampaign = (jobId: string) =>
 
 export const getCampaign = (jobId: string) =>
   request<AttackCampaign>(`/api/v1/jobs/${jobId}/campaign`);
+
+export const listCampaigns = () =>
+  request<AttackCampaignListItem[]>('/api/v1/campaigns');
+
+export const getCampaignById = (campaignId: string) =>
+  request<AttackCampaignListItem>(`/api/v1/campaigns/${campaignId}`);
 
 // Multi-file upload
 export async function uploadContractFiles(payload: {

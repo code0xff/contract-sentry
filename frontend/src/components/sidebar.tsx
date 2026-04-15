@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FileText, LogIn, LogOut, PlusCircle, Shield } from 'lucide-react';
+import { FileText, LogIn, LogOut, PlusCircle, Shield, Swords } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -13,6 +13,7 @@ const PUBLIC_PATHS = ['/login', '/register'];
 const NAV_ITEMS = [
   { href: '/', label: 'New Analysis', icon: PlusCircle, exact: true },
   { href: '/contracts', label: 'Contracts', icon: FileText, exact: false },
+  { href: '/campaigns', label: 'Attack Campaigns', icon: Swords, exact: false },
 ];
 
 export function Sidebar() {

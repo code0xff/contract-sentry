@@ -22,3 +22,10 @@ class CampaignOut(BaseModel):
     error: str | None = None
     created_at: datetime
     finished_at: datetime | None = None
+
+
+class CampaignListOut(CampaignOut):
+    """CampaignOut enriched with job/contract context for the list view."""
+    contract_id: str | None = None
+    contract_name: str | None = None
+    tools: list[str] | None = None
