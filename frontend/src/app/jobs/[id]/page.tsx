@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { createSimulation, generateAiReport, generatePoc, getCampaign, getFindings, getJob, getJobReport, triggerCampaign } from '@/lib/api';
+import { generateAiReport, getCampaign, getFindings, getJob, getJobReport, triggerCampaign } from '@/lib/api';
 import type { AttackCampaign, CampaignStatus, Finding, Job } from '@/types';
 import { PageError, PageLoading } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
@@ -64,9 +64,6 @@ export default function JobPage() {
   const [job, setJob] = useState<Job | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [loading, setLoading] = useState(true);
-  const [simLoading, setSimLoading] = useState<string | null>(null);
-  const [pocLoading, setPocLoading] = useState<string | null>(null);
-  const [pocCode, setPocCode] = useState<Record<string, string>>({});
   const [baselineInput, setBaselineInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [aiReportLoading, setAiReportLoading] = useState(false);
@@ -122,33 +119,6 @@ export default function JobPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to start campaign');
     } finally {
       setCampaignLoading(false);
-    }
-  }
-
-  async function runSimulation(finding: Finding) {
-    setSimLoading(finding.id);
-    try {
-      const sim = await createSimulation(id, { template: finding.vulnerability_type, finding_id: finding.id });
-      toast.success(`Simulation queued — status: ${sim.status}`, { description: `ID: ${sim.id}` });
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Failed to queue simulation');
-    } finally {
-      setSimLoading(null);
-    }
-  }
-
-  async function runGeneratePoc(finding: Finding) {
-    setPocLoading(finding.id);
-    try {
-      const result = await generatePoc(id, finding.id);
-      setPocCode(prev => ({ ...prev, [finding.id]: result.poc }));
-      toast.success('PoC generated');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to generate PoC';
-      toast.error(msg);
-      setPocCode(prev => ({ ...prev, [finding.id]: `// Error: ${msg}` }));
-    } finally {
-      setPocLoading(null);
     }
   }
 
@@ -309,42 +279,15 @@ export default function JobPage() {
             {findings.map(f => (
               <Card key={f.id} className={cn("border-l-4", SEVERITY_BORDER_L[f.severity] ?? 'border-l-border')}>
                 <CardContent className="pt-4">
-                  <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <SeverityBadge severity={f.severity} />
-                      <strong className="text-sm">{f.title}</strong>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={pocLoading === f.id}
-                        onClick={() => runGeneratePoc(f)}
-                        className="h-7 text-xs"
-                      >
-                        {pocLoading === f.id ? 'Generating…' : 'Generate PoC'}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={simLoading === f.id}
-                        onClick={() => runSimulation(f)}
-                        className="h-7 text-xs"
-                      >
-                        {simLoading === f.id ? 'Queuing…' : 'Simulate Exploit'}
-                      </Button>
-                    </div>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <SeverityBadge severity={f.severity} />
+                    <strong className="text-sm">{f.title}</strong>
                   </div>
                   <p className="mb-2 text-xs text-muted-foreground">
                     Tool: {f.tool} · Type: {f.vulnerability_type} · Confidence: {Math.round(f.confidence * 100)}%
                     {f.location && ` · ${f.location}`}
                   </p>
                   <p className="text-sm">{f.description}</p>
-                  {pocCode[f.id] && (
-                    <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-zinc-900 p-4 text-xs text-zinc-100 dark:bg-zinc-950">
-                      {pocCode[f.id]}
-                    </pre>
-                  )}
                 </CardContent>
               </Card>
             ))}
