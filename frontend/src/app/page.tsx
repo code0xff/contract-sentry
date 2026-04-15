@@ -114,6 +114,7 @@ export default function HomePage() {
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const extraFileInputRef = useRef<HTMLInputElement>(null);
+  const extraFolderInputRef = useRef<HTMLInputElement>(null);
 
   // Compile-check state
   const [uploadedContractId, setUploadedContractId] = useState<string | null>(null);
@@ -434,11 +435,22 @@ export default function HomePage() {
                           onDeselectAll={() => setSelectedPaths(new Set())} />
                         <input ref={extraFileInputRef} type="file" multiple accept=".sol" className="hidden"
                           onChange={e => { loadFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
-                        <button type="button"
-                          onClick={() => extraFileInputRef.current?.click()}
-                          className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
-                          + Add more files
-                        </button>
+                        <input ref={extraFolderInputRef} type="file" multiple accept=".sol" className="hidden"
+                          // @ts-expect-error webkitdirectory is non-standard
+                          webkitdirectory=""
+                          onChange={e => { loadFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
+                        <div className="flex gap-3">
+                          <button type="button"
+                            onClick={() => extraFileInputRef.current?.click()}
+                            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
+                            + Add files
+                          </button>
+                          <button type="button"
+                            onClick={() => extraFolderInputRef.current?.click()}
+                            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
+                            + Add folder
+                          </button>
+                        </div>
                       </div>
                     )}
 
