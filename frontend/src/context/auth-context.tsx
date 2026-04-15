@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 export interface AuthContextValue {
   token: string | null;
@@ -25,10 +25,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(newToken);
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('token');
     setToken(null);
-  };
+    window.location.replace('/login');
+  }, []);
 
   return (
     <AuthContext.Provider value={{ token, isAuthenticated: !!token, login, logout }}>
