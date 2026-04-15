@@ -4,17 +4,34 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getReport, getReportMarkdown } from '@/lib/api';
 import type { Report } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
 
-const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#22c55e', info: '#3b82f6',
+const SEVERITY_TEXT: Record<string, string> = {
+  critical: 'text-red-600 dark:text-red-400',
+  high:     'text-orange-600 dark:text-orange-400',
+  medium:   'text-yellow-600 dark:text-yellow-500',
+  low:      'text-green-600 dark:text-green-400',
+  info:     'text-blue-600 dark:text-blue-400',
 };
+
+const SEVERITY_BORDER_T: Record<string, string> = {
+  critical: 'border-t-red-500',
+  high:     'border-t-orange-500',
+  medium:   'border-t-yellow-500',
+  low:      'border-t-green-500',
+  info:     'border-t-blue-500',
+};
+
+const SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const;
 
 export default function ReportPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [report, setReport] = useState<Report | null>(null);
-  const [markdown, setMarkdown] = useState<string>('');
-  const [tab, setTab] = useState<'summary' | 'markdown'>('summary');
+  const [markdown, setMarkdown] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,72 +42,93 @@ export default function ReportPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <p>Loading report…</p>;
-  if (error) return <p style={{ color: 'red' }}>Error: {error}</p>;
+  if (loading) return <p className="text-muted-foreground">Loading report…</p>;
+  if (error)   return <p className="text-destructive">Error: {error}</p>;
   if (!report) return <p>Report not found</p>;
 
   const { summary } = report;
-  const CARD = { background: '#fff', borderRadius: 8, padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: '1.5rem' } as const;
-  const TAB = (active: boolean) => ({
-    padding: '0.5rem 1.2rem', border: 'none', cursor: 'pointer', borderRadius: '6px 6px 0 0',
-    background: active ? '#fff' : '#e5e7eb', fontWeight: active ? 700 : 400, borderBottom: active ? '2px solid #2563eb' : 'none',
-  } as const);
 
   return (
     <div>
-      <button onClick={() => router.back()} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.9rem', padding: 0, marginBottom: '1rem' }}>
+      <Button variant="ghost" size="sm" className="-ml-2 mb-4" onClick={() => router.back()}>
         ← Back
-      </button>
-      <h1 style={{ marginTop: 0 }}>Security Report</h1>
-      <p style={{ color: '#555', fontSize: '0.85rem' }}>Job: <code>{id}</code> · Generated: {new Date(report.created_at).toLocaleString()}</p>
+      </Button>
 
-      <div style={CARD}>
-        <h2 style={{ marginTop: 0 }}>Summary</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem', marginBottom: '1rem' }}>
-          {['critical', 'high', 'medium', 'low', 'info'].map(sev => (
-            <div key={sev} style={{ background: '#f9fafb', borderRadius: 6, padding: '0.75rem', textAlign: 'center', borderTop: `3px solid ${SEVERITY_COLOR[sev]}` }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{summary.by_severity?.[sev] ?? 0}</div>
-              <div style={{ fontSize: '0.75rem', color: '#555', textTransform: 'uppercase' }}>{sev}</div>
-            </div>
-          ))}
-        </div>
-        <p style={{ margin: 0 }}>
-          <strong>Total findings:</strong> {summary.total}
-          {summary.composite_severity && <> · <strong>Composite severity:</strong> <span style={{ color: SEVERITY_COLOR[summary.composite_severity] ?? '#333' }}>{summary.composite_severity.toUpperCase()}</span></>}
-        </p>
-      </div>
+      <h1 className="mb-1 text-2xl font-bold">Security Report</h1>
+      <p className="mb-6 text-sm text-muted-foreground">
+        Job: <code className="text-xs">{id}</code> · Generated: {new Date(report.created_at).toLocaleString()}
+      </p>
 
-      <div style={{ display: 'flex', gap: 4, marginBottom: 0 }}>
-        <button style={TAB(tab === 'summary')} onClick={() => setTab('summary')}>Overview</button>
-        <button style={TAB(tab === 'markdown')} onClick={() => setTab('markdown')}>Full Report</button>
-        <a
-          href={`/api/v1/reports/${id}/html`}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ ...TAB(false), textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-        >
-          HTML ↗
-        </a>
-      </div>
-
-      <div style={{ ...CARD, borderRadius: '0 8px 8px 8px' }}>
-        {tab === 'summary' && (
-          <div>
-            <p style={{ margin: '0 0 1rem', color: '#555' }}>
-              This report summarises all findings from static analysis, dynamic fuzzing, and exploit simulation.
-              Switch to <strong>Full Report</strong> for remediation guidance.
-            </p>
-            {report.status !== 'ready' && (
-              <p style={{ color: '#f59e0b' }}>⚠ Report is still being generated. Refresh shortly.</p>
-            )}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">Summary</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-4 grid grid-cols-5 gap-3">
+            {SEVERITIES.map(sev => (
+              <div key={sev} className={cn(
+                "rounded-md border-t-2 bg-muted p-3 text-center",
+                SEVERITY_BORDER_T[sev]
+              )}>
+                <div className={cn("text-2xl font-bold", SEVERITY_TEXT[sev])}>
+                  {summary.by_severity?.[sev] ?? 0}
+                </div>
+                <div className="mt-1 text-xs uppercase text-muted-foreground">{sev}</div>
+              </div>
+            ))}
           </div>
-        )}
-        {tab === 'markdown' && (
-          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.85rem', overflowX: 'auto' }}>
-            {markdown || 'No content yet.'}
-          </pre>
-        )}
-      </div>
+          <p className="text-sm">
+            <strong>Total findings:</strong> {summary.total}
+            {summary.composite_severity && (
+              <>
+                {' · '}
+                <strong>Composite severity:</strong>{' '}
+                <span className={SEVERITY_TEXT[summary.composite_severity] ?? ''}>
+                  {summary.composite_severity.toUpperCase()}
+                </span>
+              </>
+            )}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Tabs defaultValue="summary">
+        <div className="mb-3 flex items-center justify-between">
+          <TabsList>
+            <TabsTrigger value="summary">Overview</TabsTrigger>
+            <TabsTrigger value="markdown">Full Report</TabsTrigger>
+          </TabsList>
+          <a
+            href={`/api/v1/reports/${id}/html`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            HTML ↗
+          </a>
+        </div>
+
+        <Card>
+          <CardContent className="pt-5">
+            <TabsContent value="summary">
+              <p className="mb-3 text-sm text-muted-foreground">
+                This report summarises all findings from static analysis, dynamic fuzzing, and exploit simulation.
+                Switch to <strong>Full Report</strong> for remediation guidance.
+              </p>
+              {report.status !== 'ready' && (
+                <p className="text-sm text-amber-600 dark:text-amber-400">
+                  ⚠ Report is still being generated. Refresh shortly.
+                </p>
+              )}
+            </TabsContent>
+            <TabsContent value="markdown">
+              <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-relaxed">
+                {markdown || 'No content yet.'}
+              </pre>
+            </TabsContent>
+          </CardContent>
+        </Card>
+      </Tabs>
     </div>
   );
 }

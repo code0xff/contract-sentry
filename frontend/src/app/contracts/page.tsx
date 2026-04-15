@@ -1,13 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { listContracts } from '@/lib/api';
 import type { Contract } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
-const LANG_COLOR: Record<string, string> = {
-  solidity: '#3b82f6',
-  vyper: '#8b5cf6',
-  bytecode: '#6b7280',
+const LANG_CLASSES: Record<string, string> = {
+  solidity: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  vyper: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  bytecode: 'bg-secondary text-secondary-foreground',
 };
 
 export default function ContractListPage() {
@@ -24,53 +28,62 @@ export default function ContractListPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h1 style={{ margin: 0 }}>Contracts</h1>
-        <a
-          href="/"
-          style={{ padding: '0.5rem 1.2rem', background: '#2563eb', color: '#fff', borderRadius: 6, textDecoration: 'none', fontWeight: 600, fontSize: '0.9rem' }}
-        >
-          + New Analysis
-        </a>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Contracts</h1>
+        <Button asChild size="sm">
+          <Link href="/">+ New Analysis</Link>
+        </Button>
       </div>
 
-      {loading && <p style={{ color: '#6b7280' }}>Loading…</p>}
-      {error && <p style={{ color: '#ef4444', background: '#fef2f2', padding: '0.75rem', borderRadius: 6 }}>Error: {error}</p>}
+      {loading && <p className="text-muted-foreground">Loading…</p>}
 
-      {!loading && !error && contracts.length === 0 && (
-        <div style={{ background: '#fff', borderRadius: 8, padding: '3rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
-          <p style={{ margin: 0, color: '#6b7280' }}>No contracts yet. <a href="/" style={{ color: '#2563eb' }}>Upload your first contract</a>.</p>
+      {error && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          Error: {error}
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      {!loading && !error && contracts.length === 0 && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground">
+              No contracts yet.{' '}
+              <Link href="/" className="text-foreground underline underline-offset-4">
+                Upload your first contract
+              </Link>
+              .
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex flex-col gap-2">
         {contracts.map(c => (
-          <a
-            key={c.id}
-            href={`/contracts/${c.id}`}
-            style={{ display: 'block', background: '#fff', borderRadius: 8, padding: '1.25rem 1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,.08)', textDecoration: 'none', color: 'inherit' }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <div>
-                <span style={{ fontWeight: 600, fontSize: '1rem' }}>{c.name}</span>
-                {c.compiler_version && (
-                  <span style={{ marginLeft: 8, fontSize: '0.8rem', color: '#6b7280' }}>{c.compiler_version}</span>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <span style={{
-                  padding: '2px 8px', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600,
-                  background: `${LANG_COLOR[c.language] ?? '#6b7280'}22`,
-                  color: LANG_COLOR[c.language] ?? '#6b7280',
-                }}>
-                  {c.language}
-                </span>
-                <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
-                  {new Date(c.created_at).toLocaleDateString()}
-                </span>
-              </div>
-            </div>
-          </a>
+          <Link key={c.id} href={`/contracts/${c.id}`} className="block no-underline">
+            <Card className="cursor-pointer transition-colors hover:bg-accent/50">
+              <CardContent className="px-5 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{c.name}</span>
+                    {c.compiler_version && (
+                      <span className="text-xs text-muted-foreground">{c.compiler_version}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium",
+                      LANG_CLASSES[c.language] ?? 'bg-secondary text-secondary-foreground'
+                    )}>
+                      {c.language}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(c.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
     </div>

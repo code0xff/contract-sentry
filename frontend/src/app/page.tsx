@@ -4,9 +4,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { analyzeContract, createContract } from '@/lib/api';
 import type { ContractLanguage } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
-const CARD = { background: '#fff', borderRadius: 8, padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: '1.5rem' } as const;
-const BTN = { padding: '0.6rem 1.4rem', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' } as const;
+const TOOLS = ['slither', 'mythril', 'echidna'] as const;
 
 export default function HomePage() {
   const router = useRouter();
@@ -27,7 +32,6 @@ export default function HomePage() {
     if (!name.trim()) { setError('Contract name is required'); return; }
     if (language !== 'bytecode' && !source.trim()) { setError('Source code is required'); return; }
     if (language === 'bytecode' && !bytecode.trim()) { setError('Bytecode is required'); return; }
-
     setLoading(true);
     try {
       const contract = await createContract({
@@ -46,79 +50,96 @@ export default function HomePage() {
   }
 
   return (
-    <div>
-      <h1 style={{ marginTop: 0 }}>Submit Contract for Analysis</h1>
+    <div className="max-w-2xl">
+      <h1 className="mb-6 text-2xl font-bold">Submit Contract for Analysis</h1>
 
-      <div style={CARD}>
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Contract Name</label>
-            <input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="MyContract.sol"
-              style={{ width: '100%', padding: '0.5rem', borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box' }}
-            />
-          </div>
-
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Language</label>
-            <select
-              value={language}
-              onChange={e => setLanguage(e.target.value as ContractLanguage)}
-              style={{ padding: '0.5rem', borderRadius: 4, border: '1px solid #ccc' }}
-            >
-              <option value="solidity">Solidity</option>
-              <option value="bytecode">Bytecode only</option>
-            </select>
-          </div>
-
-          {language !== 'bytecode' && (
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Source Code</label>
-              <textarea
-                value={source}
-                onChange={e => setSource(e.target.value)}
-                placeholder={'// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\ncontract MyContract { ... }'}
-                rows={12}
-                style={{ width: '100%', padding: '0.5rem', borderRadius: 4, border: '1px solid #ccc', fontFamily: 'monospace', fontSize: '0.85rem', boxSizing: 'border-box' }}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Contract Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="name">Contract Name</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="MyContract.sol"
               />
             </div>
-          )}
 
-          {language === 'bytecode' && (
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Bytecode (0x...)</label>
-              <input
-                value={bytecode}
-                onChange={e => setBytecode(e.target.value)}
-                placeholder="0x608060..."
-                style={{ width: '100%', padding: '0.5rem', borderRadius: 4, border: '1px solid #ccc', fontFamily: 'monospace', boxSizing: 'border-box' }}
-              />
+            <div className="space-y-1.5">
+              <Label htmlFor="language">Language</Label>
+              <select
+                id="language"
+                value={language}
+                onChange={e => setLanguage(e.target.value as ContractLanguage)}
+                className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="solidity">Solidity</option>
+                <option value="bytecode">Bytecode only</option>
+              </select>
             </div>
-          )}
 
-          <div style={{ marginBottom: '1.2rem' }}>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Analysis Tools</label>
-            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-              {['slither', 'mythril', 'echidna'].map(t => (
-                <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={tools.includes(t)} onChange={() => toggleTool(t)} />
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </label>
-              ))}
+            {language !== 'bytecode' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="source">Source Code</Label>
+                <Textarea
+                  id="source"
+                  value={source}
+                  onChange={e => setSource(e.target.value)}
+                  placeholder={'// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\ncontract MyContract { ... }'}
+                  rows={12}
+                  className="font-mono text-xs"
+                />
+              </div>
+            )}
+
+            {language === 'bytecode' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="bytecode">Bytecode (0x...)</Label>
+                <Input
+                  id="bytecode"
+                  value={bytecode}
+                  onChange={e => setBytecode(e.target.value)}
+                  placeholder="0x608060..."
+                  className="font-mono"
+                />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Analysis Tools</Label>
+              <div className="flex flex-wrap gap-4">
+                {TOOLS.map(t => (
+                  <label key={t} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={tools.includes(t)}
+                      onChange={() => toggleTool(t)}
+                      className="rounded border-border"
+                    />
+                    <span className="capitalize">{t}</span>
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {error && <p style={{ color: '#c0392b', background: '#fdecea', padding: '0.5rem 0.75rem', borderRadius: 4 }}>{error}</p>}
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-          <button type="submit" disabled={loading} style={{ ...BTN, background: loading ? '#aaa' : '#2563eb', color: '#fff' }}>
-            {loading ? 'Submitting…' : 'Analyze Contract'}
-          </button>
-        </form>
-      </div>
+            <Button type="submit" disabled={loading}>
+              {loading ? 'Submitting…' : 'Analyze Contract'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-      <p style={{ color: '#666', fontSize: '0.85rem' }}>
+      <p className="mt-4 text-sm text-muted-foreground">
         Results are processed asynchronously. You will be redirected to the job status page.
       </p>
     </div>

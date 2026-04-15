@@ -1,11 +1,15 @@
 'use client';
+
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
-const CARD = { background: '#fff', borderRadius: 8, padding: '2rem', boxShadow: '0 1px 4px rgba(0,0,0,.08)', maxWidth: 400, margin: '4rem auto' } as const;
-const INPUT = { width: '100%', padding: '0.5rem', borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box' as const, marginBottom: '1rem' };
-const BTN = { width: '100%', padding: '0.6rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 } as const;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,19 +40,38 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={CARD}>
-      <h2 style={{ marginTop: 0 }}>Sign In</h2>
-      <form onSubmit={handleSubmit}>
-        <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Email</label>
-        <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={INPUT} required />
-        <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Password</label>
-        <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={INPUT} required />
-        {error && <p style={{ color: '#ef4444', marginBottom: '0.75rem' }}>{error}</p>}
-        <button type="submit" disabled={loading} style={BTN}>{loading ? 'Signing in\u2026' : 'Sign In'}</button>
-      </form>
-      <p style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.9rem' }}>
-        No account? <a href="/register" style={{ color: '#2563eb' }}>Register</a>
-      </p>
+    <div className="flex justify-center pt-16">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>Sign In</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="password">Password</Label>
+              <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+            </div>
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <Button type="submit" disabled={loading} className="w-full">
+              {loading ? 'Signing in…' : 'Sign In'}
+            </Button>
+          </form>
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            No account?{' '}
+            <Link href="/register" className="text-foreground underline underline-offset-4">
+              Register
+            </Link>
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,29 +1,43 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { analyzeContract, getContract, listContractJobs } from '@/lib/api';
 import type { Contract, Job } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
-const STATUS_COLOR: Record<string, string> = {
-  pending: '#f59e0b', running: '#3b82f6', completed: '#22c55e', failed: '#ef4444', cancelled: '#6b7280',
+const STATUS_CLASSES: Record<string, string> = {
+  pending:   'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  running:   'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  completed: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  failed:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  cancelled: 'bg-secondary text-secondary-foreground',
+};
+
+const STATUS_DOT: Record<string, string> = {
+  pending:   'bg-amber-500',
+  running:   'bg-blue-500 animate-pulse',
+  completed: 'bg-green-500',
+  failed:    'bg-red-500',
+  cancelled: 'bg-gray-400',
 };
 
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px',
-      borderRadius: 12, fontSize: '0.78rem', fontWeight: 600,
-      background: `${STATUS_COLOR[status] ?? '#6b7280'}18`,
-      color: STATUS_COLOR[status] ?? '#6b7280',
-    }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_COLOR[status] ?? '#6b7280', display: 'inline-block' }} />
+    <span className={cn(
+      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium",
+      STATUS_CLASSES[status] ?? 'bg-secondary text-secondary-foreground'
+    )}>
+      <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[status] ?? 'bg-gray-400')} />
       {status}
     </span>
   );
 }
 
-const CARD = { background: '#fff', borderRadius: 8, padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: '1.25rem' } as const;
+const TOOLS = ['slither', 'mythril', 'echidna'];
 
 export default function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -38,8 +52,7 @@ export default function ContractDetailPage() {
   const load = useCallback(async () => {
     try {
       const [c, js] = await Promise.all([getContract(id), listContractJobs(id)]);
-      setContract(c);
-      setJobs(js);
+      setContract(c); setJobs(js);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -49,7 +62,6 @@ export default function ContractDetailPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Poll while any job is active
   useEffect(() => {
     const hasActive = jobs.some(j => j.status === 'pending' || j.status === 'running');
     if (!hasActive) return;
@@ -72,81 +84,89 @@ export default function ContractDetailPage() {
     }
   }
 
-  if (loading) return <p style={{ color: '#6b7280' }}>Loading…</p>;
-  if (error) return <p style={{ color: '#ef4444' }}>Error: {error}</p>;
+  if (loading) return <p className="text-muted-foreground">Loading…</p>;
+  if (error)   return <p className="text-destructive">Error: {error}</p>;
   if (!contract) return <p>Contract not found</p>;
 
   const activeJob = jobs.find(j => j.status === 'pending' || j.status === 'running');
 
   return (
     <div>
-      <button
-        onClick={() => router.push('/contracts')}
-        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.9rem', padding: 0, marginBottom: '1rem' }}
-      >
+      <Button variant="ghost" size="sm" className="-ml-2 mb-4" onClick={() => router.push('/contracts')}>
         ← Contracts
-      </button>
+      </Button>
 
-      <div style={CARD}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <h1 style={{ margin: '0 0 0.25rem' }}>{contract.name}</h1>
-            <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-              {contract.language}{contract.compiler_version ? ` · ${contract.compiler_version}` : ''} · Added {new Date(contract.created_at).toLocaleDateString()}
-            </span>
-          </div>
-          <div>
-            <div style={{ marginBottom: '0.5rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-              {['slither', 'mythril', 'echidna'].map(t => (
-                <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: '0.9rem' }}>
-                  <input type="checkbox" checked={selectedTools.includes(t)} onChange={() => toggleTool(t)} disabled={!!activeJob} />
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </label>
-              ))}
+      <Card className="mb-6">
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="mb-1 text-xl font-bold">{contract.name}</h1>
+              <p className="text-sm text-muted-foreground">
+                {contract.language}
+                {contract.compiler_version ? ` · ${contract.compiler_version}` : ''}
+                {' · Added '}{new Date(contract.created_at).toLocaleDateString()}
+              </p>
             </div>
-            <button
-              onClick={startAnalysis}
-              disabled={analyzing || !!activeJob || selectedTools.length === 0}
-              style={{
-                padding: '0.5rem 1.2rem', border: 'none', borderRadius: 6, cursor: 'pointer',
-                fontWeight: 600, fontSize: '0.9rem', width: '100%',
-                background: analyzing || !!activeJob ? '#d1d5db' : '#2563eb',
-                color: analyzing || !!activeJob ? '#6b7280' : '#fff',
-              }}
-            >
-              {activeJob ? 'Analysis running…' : analyzing ? 'Starting…' : 'Run Analysis'}
-            </button>
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-wrap gap-3">
+                {TOOLS.map(t => (
+                  <label key={t} className="flex cursor-pointer items-center gap-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedTools.includes(t)}
+                      onChange={() => toggleTool(t)}
+                      disabled={!!activeJob}
+                      className="rounded"
+                    />
+                    <span className="capitalize">{t}</span>
+                  </label>
+                ))}
+              </div>
+              <Button
+                onClick={startAnalysis}
+                disabled={analyzing || !!activeJob || selectedTools.length === 0}
+                size="sm"
+              >
+                {activeJob ? 'Analysis running…' : analyzing ? 'Starting…' : 'Run Analysis'}
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <h2 style={{ margin: '0 0 1rem' }}>Analysis History ({jobs.length})</h2>
+      <h2 className="mb-3 text-lg font-semibold">Analysis History ({jobs.length})</h2>
 
       {jobs.length === 0 && (
-        <div style={{ ...CARD, textAlign: 'center', color: '#6b7280' }}>
-          No analyses yet. Run your first analysis above.
-        </div>
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            No analyses yet. Run your first analysis above.
+          </CardContent>
+        </Card>
       )}
 
-      {jobs.map(job => (
-        <a
-          key={job.id}
-          href={`/jobs/${job.id}`}
-          style={{ ...CARD, display: 'block', textDecoration: 'none', color: 'inherit', marginBottom: '0.75rem' }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <div>
-              <StatusBadge status={job.status} />
-              <span style={{ marginLeft: 10, fontSize: '0.85rem', color: '#6b7280' }}>{job.tools.join(', ')}</span>
-            </div>
-            <div style={{ fontSize: '0.82rem', color: '#9ca3af', textAlign: 'right' }}>
-              {job.status === 'running' && <span style={{ marginRight: 10, color: '#3b82f6' }}>{job.progress}%</span>}
-              {new Date(job.created_at).toLocaleString()}
-            </div>
-          </div>
-          {job.error && <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: '#ef4444' }}>{job.error}</p>}
-        </a>
-      ))}
+      <div className="flex flex-col gap-2">
+        {jobs.map(job => (
+          <Link key={job.id} href={`/jobs/${job.id}`} className="block no-underline">
+            <Card className="cursor-pointer transition-colors hover:bg-accent/50">
+              <CardContent className="px-5 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={job.status} />
+                    <span className="text-sm text-muted-foreground">{job.tools.join(', ')}</span>
+                  </div>
+                  <div className="text-right text-xs text-muted-foreground">
+                    {job.status === 'running' && (
+                      <span className="mr-3 font-medium text-blue-500">{job.progress}%</span>
+                    )}
+                    {new Date(job.created_at).toLocaleString()}
+                  </div>
+                </div>
+                {job.error && <p className="mt-2 text-sm text-destructive">{job.error}</p>}
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

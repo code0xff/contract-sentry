@@ -4,28 +4,44 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createSimulation, generatePoc, getFindings, getJob, getJobReport } from '@/lib/api';
 import type { Finding, Job } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
-const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#7f1d1d', high: '#92400e', medium: '#78350f', low: '#14532d', info: '#1e3a5f',
-};
-const SEVERITY_BG: Record<string, string> = {
-  critical: '#fee2e2', high: '#fef3c7', medium: '#fef9c3', low: '#dcfce7', info: '#dbeafe',
+const SEVERITY_BADGE: Record<string, string> = {
+  critical: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800',
+  high:     'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800',
+  medium:   'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800',
+  low:      'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800',
+  info:     'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800',
 };
 
-function Badge({ severity }: { severity: string }) {
+const SEVERITY_BORDER_L: Record<string, string> = {
+  critical: 'border-l-red-500',
+  high:     'border-l-orange-500',
+  medium:   'border-l-yellow-500',
+  low:      'border-l-green-500',
+  info:     'border-l-blue-500',
+};
+
+const STATUS_DOT: Record<string, string> = {
+  pending:   'bg-amber-500',
+  running:   'bg-blue-500 animate-pulse',
+  completed: 'bg-green-500',
+  failed:    'bg-red-500',
+  cancelled: 'bg-gray-400',
+};
+
+function SeverityBadge({ severity }: { severity: string }) {
   return (
-    <span style={{
-      display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: '0.75rem',
-      fontWeight: 700, background: SEVERITY_BG[severity] ?? '#eee', color: SEVERITY_COLOR[severity] ?? '#333',
-    }}>
+    <span className={cn(
+      "inline-flex items-center rounded border px-2 py-0.5 text-xs font-bold",
+      SEVERITY_BADGE[severity] ?? 'bg-secondary text-secondary-foreground border-border'
+    )}>
       {severity.toUpperCase()}
     </span>
   );
-}
-
-function StatusDot({ status }: { status: string }) {
-  const color = { pending: '#f59e0b', running: '#3b82f6', completed: '#22c55e', failed: '#ef4444', cancelled: '#6b7280' }[status] ?? '#ccc';
-  return <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: color, marginRight: 6 }} />;
 }
 
 export default function JobPage() {
@@ -55,11 +71,8 @@ export default function JobPage() {
     }
   }, [id]);
 
-  useEffect(() => {
-    loadJob();
-  }, [loadJob]);
+  useEffect(() => { loadJob(); }, [loadJob]);
 
-  // Poll while pending/running
   useEffect(() => {
     if (!job || job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') return;
     const t = setInterval(loadJob, 3000);
@@ -90,42 +103,73 @@ export default function JobPage() {
     }
   }
 
-  if (loading) return <p>Loading…</p>;
-  if (error) return <p style={{ color: 'red' }}>Error: {error}</p>;
-  if (!job) return <p>Job not found</p>;
+  if (loading) return <p className="text-muted-foreground">Loading…</p>;
+  if (error)   return <p className="text-destructive">Error: {error}</p>;
+  if (!job)    return <p>Job not found</p>;
 
-  const CARD = { background: '#fff', borderRadius: 8, padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: '1.5rem' } as const;
+  const isActive = job.status === 'pending' || job.status === 'running';
 
   return (
     <div>
-      <button onClick={() => router.push('/')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.9rem', padding: 0, marginBottom: '1rem' }}>
+      <Button variant="ghost" size="sm" className="-ml-2 mb-4" onClick={() => router.push('/')}>
         ← Back
-      </button>
-      <h1 style={{ marginTop: 0 }}>Job Status</h1>
+      </Button>
 
-      <div style={CARD}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.9rem' }}>
-          <div><strong>Job ID:</strong> <code style={{ fontSize: '0.8rem' }}>{job.id}</code></div>
-          <div><strong>Status:</strong> <StatusDot status={job.status} />{job.status}</div>
-          <div><strong>Tools:</strong> {job.tools.join(', ')}</div>
-          <div><strong>Progress:</strong> {job.progress}%</div>
-          {job.started_at && <div><strong>Started:</strong> {new Date(job.started_at).toLocaleString()}</div>}
-          {job.finished_at && <div><strong>Finished:</strong> {new Date(job.finished_at).toLocaleString()}</div>}
-          {job.error && <div style={{ gridColumn: '1/-1', color: '#ef4444' }}><strong>Error:</strong> {job.error}</div>}
-        </div>
+      <h1 className="mb-4 text-2xl font-bold">Job Status</h1>
 
-        {(job.status === 'pending' || job.status === 'running') && (
-          <div style={{ marginTop: '1rem', background: '#f0f9ff', padding: '0.75rem', borderRadius: 4, color: '#1d4ed8' }}>
-            Analysis in progress… page auto-refreshes every 3s.
+      <Card className="mb-6">
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-xs text-muted-foreground">Job ID</p>
+              <code className="text-xs">{job.id}</code>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Status</p>
+              <span className="inline-flex items-center gap-1.5">
+                <span className={cn("h-2 w-2 rounded-full", STATUS_DOT[job.status] ?? 'bg-gray-400')} />
+                {job.status}
+              </span>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Tools</p>
+              {job.tools.join(', ')}
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Progress</p>
+              {job.progress}%
+            </div>
+            {job.started_at && (
+              <div>
+                <p className="text-xs text-muted-foreground">Started</p>
+                {new Date(job.started_at).toLocaleString()}
+              </div>
+            )}
+            {job.finished_at && (
+              <div>
+                <p className="text-xs text-muted-foreground">Finished</p>
+                {new Date(job.finished_at).toLocaleString()}
+              </div>
+            )}
+            {job.error && (
+              <div className="col-span-2 text-sm text-destructive">{job.error}</div>
+            )}
           </div>
-        )}
-      </div>
+
+          {isActive && (
+            <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400">
+              Analysis in progress… page auto-refreshes every 3s.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {job.status === 'completed' && (
         <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 style={{ margin: 0 }}>Findings ({findings.length})</h2>
-            <button
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Findings ({findings.length})</h2>
+            <Button
+              size="sm"
               onClick={async () => {
                 try {
                   const report = await getJobReport(id);
@@ -134,77 +178,91 @@ export default function JobPage() {
                   alert('Report not ready yet. Please try again shortly.');
                 }
               }}
-              style={{ padding: '0.5rem 1.2rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
             >
               View Report
-            </button>
+            </Button>
           </div>
 
           {findings.length === 0 && (
-            <div style={CARD}><p style={{ margin: 0, color: '#22c55e' }}>✓ No findings — contract looks clean!</p></div>
+            <Card className="mb-4">
+              <CardContent className="py-8 text-center">
+                <p className="font-medium text-green-600 dark:text-green-400">
+                  ✓ No findings — contract looks clean!
+                </p>
+              </CardContent>
+            </Card>
           )}
 
-          {findings.map(f => (
-            <div key={f.id} style={{ ...CARD, borderLeft: `4px solid ${SEVERITY_COLOR[f.severity] ?? '#ccc'}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <div>
-                  <Badge severity={f.severity} />
-                  {' '}
-                  <strong style={{ fontSize: '1rem' }}>{f.title}</strong>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    onClick={() => runGeneratePoc(f)}
-                    disabled={pocLoading === f.id}
-                    style={{ padding: '0.35rem 0.9rem', background: pocLoading === f.id ? '#aaa' : '#0891b2', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: '0.8rem' }}
-                  >
-                    {pocLoading === f.id ? 'Generating…' : 'Generate PoC'}
-                  </button>
-                  <button
-                    onClick={() => runSimulation(f)}
-                    disabled={simLoading === f.id}
-                    style={{ padding: '0.35rem 0.9rem', background: simLoading === f.id ? '#aaa' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: '0.8rem' }}
-                  >
-                    {simLoading === f.id ? 'Queuing…' : 'Simulate Exploit'}
-                  </button>
-                </div>
-              </div>
-              <div style={{ fontSize: '0.8rem', color: '#555', marginTop: 4 }}>
-                Tool: {f.tool} | Type: {f.vulnerability_type} | Confidence: {Math.round(f.confidence * 100)}%
-                {f.location && ` | ${f.location}`}
-              </div>
-              <p style={{ margin: '0.5rem 0 0', fontSize: '0.9rem' }}>{f.description}</p>
-              {pocCode[f.id] && (
-                <pre style={{
-                  marginTop: '0.75rem', background: '#1e293b', color: '#e2e8f0',
-                  padding: '1rem', borderRadius: 6, fontSize: '0.78rem',
-                  overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                }}>
-                  {pocCode[f.id]}
-                </pre>
-              )}
-            </div>
-          ))}
-
-          <div style={{ ...CARD, marginTop: '1.5rem' }}>
-            <h3 style={{ margin: '0 0 0.75rem' }}>Compare with baseline</h3>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <input
-                type="text"
-                placeholder="Baseline job ID"
-                value={baselineInput}
-                onChange={e => setBaselineInput(e.target.value)}
-                style={{ flex: 1, minWidth: 200, padding: '0.4rem 0.75rem', border: '1px solid #d1d5db', borderRadius: 5, fontSize: '0.9rem' }}
-              />
-              <button
-                onClick={() => { if (baselineInput.trim()) router.push(`/jobs/${id}/diff?baseline=${encodeURIComponent(baselineInput.trim())}`); }}
-                disabled={!baselineInput.trim()}
-                style={{ padding: '0.4rem 1rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem' }}
-              >
-                Compare
-              </button>
-            </div>
+          <div className="mb-6 flex flex-col gap-3">
+            {findings.map(f => (
+              <Card key={f.id} className={cn("border-l-4", SEVERITY_BORDER_L[f.severity] ?? 'border-l-border')}>
+                <CardContent className="pt-4">
+                  <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <SeverityBadge severity={f.severity} />
+                      <strong className="text-sm">{f.title}</strong>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={pocLoading === f.id}
+                        onClick={() => runGeneratePoc(f)}
+                        className="h-7 text-xs"
+                      >
+                        {pocLoading === f.id ? 'Generating…' : 'Generate PoC'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={simLoading === f.id}
+                        onClick={() => runSimulation(f)}
+                        className="h-7 text-xs"
+                      >
+                        {simLoading === f.id ? 'Queuing…' : 'Simulate Exploit'}
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Tool: {f.tool} · Type: {f.vulnerability_type} · Confidence: {Math.round(f.confidence * 100)}%
+                    {f.location && ` · ${f.location}`}
+                  </p>
+                  <p className="text-sm">{f.description}</p>
+                  {pocCode[f.id] && (
+                    <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-zinc-900 p-4 text-xs text-zinc-100 dark:bg-zinc-950">
+                      {pocCode[f.id]}
+                    </pre>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Compare with baseline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  placeholder="Baseline job ID"
+                  value={baselineInput}
+                  onChange={e => setBaselineInput(e.target.value)}
+                  className="min-w-[200px] flex-1"
+                />
+                <Button
+                  size="sm"
+                  disabled={!baselineInput.trim()}
+                  onClick={() => {
+                    if (baselineInput.trim())
+                      router.push(`/jobs/${id}/diff?baseline=${encodeURIComponent(baselineInput.trim())}`);
+                  }}
+                >
+                  Compare
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>
