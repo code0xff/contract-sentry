@@ -101,15 +101,21 @@ class SlitherAnalyzer(BaseAnalyzer):
             # Build remappings from globally installed + locally installed packages
             remappings = build_solc_remappings(tmp)
 
-            # Target user-owned files only — exclude @scope/ dependency dirs so
-            # slither doesn't try to analyse pure interface-only packages and
-            # report "No contract was analyzed".
-            user_files = [
-                str(tmp / p) for p in files
-                if p.endswith(".sol") and not p.startswith("@")
-            ]
-            target = user_files if user_files else [str(tmp)]
-            cmd = [self.binary] + target + ["--json", "-"]
+            # Target the common ancestor directory of user-owned files,
+            # excluding @scope/ dependency dirs so slither doesn't try to
+            # analyse pure interface-only packages ("No contract was analyzed").
+            import os as _os
+            user_keys = [p for p in files if p.endswith(".sol") and not p.startswith("@")]
+            if user_keys:
+                common = _os.path.commonpath(user_keys)
+                common_path = Path(common)
+                # commonpath may return a file path when there's only one entry
+                if common_path.suffix:
+                    common_path = common_path.parent
+                target_dir = tmp / common_path if str(common_path) != "." else tmp
+            else:
+                target_dir = tmp
+            cmd = [self.binary, str(target_dir), "--json", "-"]
             if remappings:
                 cmd += ["--solc-remaps", " ".join(remappings)]
 
