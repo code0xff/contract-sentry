@@ -39,10 +39,22 @@ export interface Job {
   tools: string[];
   progress: number;
   error: string | null;
-  tool_errors: Record<string, string> | null;
+  tool_errors: Record<string, string | ToolExecutionStatus> | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+}
+
+export interface ToolExecutionStatus {
+  status: "ok" | "failed" | "skipped";
+  summary: string;
+  detail: string | null;
+  stage: string | null;
+  command: string | null;
+  returncode: number | null;
+  timed_out: boolean;
+  stdout_tail: string | null;
+  stderr_tail: string | null;
 }
 
 export interface Finding {

@@ -29,10 +29,10 @@ export function Sidebar() {
   return (
     <aside className="flex h-screen w-[220px] shrink-0 flex-col border-r bg-background">
       {/* Logo */}
-      <div className="flex h-14 items-center gap-2 border-b px-4">
+      <Link href="/" className="flex h-14 items-center gap-2 border-b px-4">
         <Shield className="h-5 w-5 text-foreground" />
         <span className="font-bold tracking-tight">Contract Sentry</span>
-      </div>
+      </Link>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">

@@ -5,11 +5,13 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from app.analyzers.base import build_solc_remappings, resolve_npm_deps
 
 _MISSING_RE = re.compile(r'Source "([^"]+)" not found')
 _PRAGMA_RE = re.compile(r'pragma\s+solidity\s+([^;]+)')
+_MAX_AUTO_RESOLVE_PASSES = 3
 
 
 def _detect_pragma(files: dict[str, str]) -> str | None:
@@ -60,6 +62,91 @@ def check_compilation(files: dict[str, str]) -> dict[str, object]:
         ][:20]
         success = not missing and not any("Error:" in e for e in errors)
         return {"success": success, "missing": missing, "errors": errors}
+
+
+def resolve_missing_imports_by_basename(
+    files: dict[str, str],
+    missing_paths: list[str],
+) -> dict[str, Any]:
+    """Resolve missing imports when their basename uniquely matches an uploaded file."""
+    updated_files = dict(files)
+    basename_map: dict[str, list[str]] = {}
+    for path in sorted(updated_files):
+        basename_map.setdefault(path.rsplit("/", 1)[-1], []).append(path)
+
+    auto_resolved: list[dict[str, str]] = []
+    ambiguous: list[dict[str, object]] = []
+
+    for missing_path in sorted(set(missing_paths)):
+        if missing_path in updated_files:
+            continue
+        basename = missing_path.rsplit("/", 1)[-1]
+        candidates = [path for path in basename_map.get(basename, []) if path != missing_path]
+        if len(candidates) == 1:
+            matched_path = candidates[0]
+            updated_files[missing_path] = updated_files[matched_path]
+            auto_resolved.append(
+                {
+                    "missing_path": missing_path,
+                    "matched_path": matched_path,
+                }
+            )
+            basename_map.setdefault(basename, []).append(missing_path)
+        elif len(candidates) > 1:
+            ambiguous.append(
+                {
+                    "missing_path": missing_path,
+                    "candidates": candidates,
+                }
+            )
+
+    return {
+        "files": updated_files,
+        "auto_resolved": auto_resolved,
+        "ambiguous": ambiguous,
+    }
+
+
+def check_compilation_with_fallback(
+    files: dict[str, str],
+    max_passes: int = _MAX_AUTO_RESOLVE_PASSES,
+) -> dict[str, Any]:
+    """Compile project files, auto-aliasing uniquely matched missing imports between passes."""
+    working_files = dict(files)
+    auto_resolved: list[dict[str, str]] = []
+    result: dict[str, Any] = {"success": True, "missing": [], "errors": []}
+    pending_recompile = False
+
+    for _ in range(max_passes):
+        result = check_compilation(working_files)
+        pending_recompile = False
+        missing = list(result.get("missing", []))
+        if not missing:
+            break
+
+        resolution = resolve_missing_imports_by_basename(working_files, missing)
+        newly_resolved = resolution["auto_resolved"]
+        if not newly_resolved:
+            break
+
+        working_files = resolution["files"]
+        auto_resolved.extend(newly_resolved)
+        pending_recompile = True
+
+    if pending_recompile:
+        result = check_compilation(working_files)
+
+    final_missing = list(result.get("missing", []))
+    ambiguous = resolve_missing_imports_by_basename(working_files, final_missing)["ambiguous"]
+
+    return {
+        "success": bool(result.get("success", False)),
+        "missing": final_missing,
+        "errors": list(result.get("errors", [])),
+        "auto_resolved": auto_resolved,
+        "ambiguous": ambiguous,
+        "files": working_files,
+    }
 
 
 def _run_via_solcx(

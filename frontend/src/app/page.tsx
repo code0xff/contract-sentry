@@ -16,9 +16,55 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
 const TOOLS = ['slither', 'mythril', 'echidna'] as const;
+const NON_ENTRY_SEGMENTS = new Set([
+  'interface',
+  'interfaces',
+  'lib',
+  'libs',
+  'node_modules',
+  'spec',
+  'specs',
+  'test',
+  'tests',
+  'vendor',
+  'vendors',
+]);
+const CONTRACT_RE = /\b(?:abstract\s+)?contract\s+[A-Za-z_][A-Za-z0-9_]*/;
+const LIBRARY_RE = /\blibrary\s+[A-Za-z_][A-Za-z0-9_]*/;
+const INTERFACE_RE = /\binterface\s+[A-Za-z_][A-Za-z0-9_]*/;
 
 function getPath(f: File) {
   return (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name;
+}
+
+function isNonEntryPath(path: string) {
+  return path.split('/').some(part => NON_ENTRY_SEGMENTS.has(part.toLowerCase()));
+}
+
+function isInterfaceOnlySource(source: string) {
+  if (CONTRACT_RE.test(source) || LIBRARY_RE.test(source)) return false;
+  return INTERFACE_RE.test(source);
+}
+
+async function getDefaultEntryFiles(files: File[]) {
+  const inspected = await Promise.all(
+    files.map(async file => {
+      const path = getPath(file);
+      return {
+        path,
+        isPreferred: !path.startsWith('@')
+          && !isNonEntryPath(path)
+          && !isInterfaceOnlySource(await file.text()),
+      };
+    }),
+  );
+
+  const preferred = inspected.filter(file => file.isPreferred).map(file => file.path);
+  if (preferred.length > 0) return preferred;
+
+  return inspected
+    .map(file => file.path)
+    .filter(path => path.endsWith('.sol') && !path.startsWith('@'));
 }
 
 function FileSelector({
@@ -199,11 +245,8 @@ export default function HomePage() {
     try {
       const contract = await uploadContractFiles({ name: autoName, language: 'solidity', files: filesToUpload });
       setUploadedContractId(contract.id);
-      // Auto-select all user-owned files as entry points
-      const userOwned = filesToUpload
-        .map(f => getPath(f))
-        .filter(p => !p.startsWith('@'));
-      setEntryFiles(new Set(userOwned));
+      const defaultEntryFiles = await getDefaultEntryFiles(filesToUpload);
+      setEntryFiles(new Set(defaultEntryFiles));
       setEntryFilesReady(true);
       // Do NOT auto-run compile-check — user can trigger it manually if needed
     } catch (err) {
@@ -218,29 +261,7 @@ export default function HomePage() {
     setCheckLoading(true);
     setError(null);
     try {
-      const result = await compileCheck(uploadedContractId);
-
-      // Auto-match missing imports from already-loaded files by filename
-      if (result.missing.length > 0) {
-        const autoFiles: File[] = [];
-        const pathOverrides: Record<string, string> = {};
-        for (const missingPath of result.missing) {
-          const missingName = missingPath.split('/').pop()!;
-          const match = allFiles.find(f => f.name === missingName && !autoFiles.includes(f));
-          if (match) {
-            autoFiles.push(match);
-            pathOverrides[match.name] = missingPath;
-          }
-        }
-        if (autoFiles.length > 0) {
-          await addContractFiles(uploadedContractId, autoFiles, pathOverrides);
-          const updated = await compileCheck(uploadedContractId);
-          setCheckResult(updated);
-          return;
-        }
-      }
-
-      setCheckResult(result);
+      setCheckResult(await compileCheck(uploadedContractId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Compile check failed');
     } finally {
@@ -480,9 +501,25 @@ export default function HomePage() {
                     )}
 
                     {!checkLoading && checkResult?.success && (
-                      <div className="flex items-center gap-2 rounded-md border border-green-300 bg-green-50 px-4 py-3 text-sm font-medium text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400">
-                        <CheckCircle className="h-4 w-4 shrink-0" />
-                        Compilation OK — ready to analyze
+                      <div className="space-y-3 rounded-md border border-green-300 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950/30">
+                        <div className="flex items-center gap-2 text-sm font-medium text-green-700 dark:text-green-400">
+                          <CheckCircle className="h-4 w-4 shrink-0" />
+                          Compilation OK — ready to analyze
+                        </div>
+                        {checkResult.auto_resolved.length > 0 && (
+                          <div>
+                            <p className="mb-1 text-xs font-medium text-green-800 dark:text-green-400">
+                              Auto-resolved imports:
+                            </p>
+                            <ul className="space-y-1">
+                              {checkResult.auto_resolved.map(({ missing_path, matched_path }) => (
+                                <li key={missing_path} className="font-mono text-xs text-green-700 dark:text-green-500">
+                                  {missing_path} ← {matched_path}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -515,6 +552,36 @@ export default function HomePage() {
                             <Button size="sm" variant="outline" onClick={() => extraFileInputRef.current?.click()} disabled={checkLoading}>
                               Add Missing Files
                             </Button>
+                          </>
+                        )}
+
+                        {checkResult.auto_resolved.length > 0 && (
+                          <>
+                            <p className="mb-1 mt-3 text-xs font-medium text-yellow-800 dark:text-yellow-400">
+                              Auto-resolved imports:
+                            </p>
+                            <ul className="mb-3 space-y-1">
+                              {checkResult.auto_resolved.map(({ missing_path, matched_path }) => (
+                                <li key={missing_path} className="font-mono text-xs text-yellow-700 dark:text-yellow-500">
+                                  {missing_path} ← {matched_path}
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+
+                        {checkResult.ambiguous.length > 0 && (
+                          <>
+                            <p className="mb-1 text-xs font-medium text-yellow-800 dark:text-yellow-400">
+                              Ambiguous matches:
+                            </p>
+                            <ul className="mb-3 space-y-1">
+                              {checkResult.ambiguous.map(({ missing_path, candidates }) => (
+                                <li key={missing_path} className="font-mono text-xs text-yellow-700 dark:text-yellow-500">
+                                  {missing_path} → {candidates.join(', ')}
+                                </li>
+                              ))}
+                            </ul>
                           </>
                         )}
 

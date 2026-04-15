@@ -179,6 +179,14 @@ export interface CompileCheckResult {
   success: boolean;
   missing: string[];
   errors: string[];
+  auto_resolved: Array<{
+    missing_path: string;
+    matched_path: string;
+  }>;
+  ambiguous: Array<{
+    missing_path: string;
+    candidates: string[];
+  }>;
 }
 
 export const compileCheck = (contractId: string): Promise<CompileCheckResult> =>

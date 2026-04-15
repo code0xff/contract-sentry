@@ -122,6 +122,13 @@ export default function ContractDetailPage() {
 
   const activeJob = jobs.find(j => j.status === 'pending' || j.status === 'running');
 
+  function hasFailedToolStatus(job: Job) {
+    if (!job.tool_errors) return false;
+    return Object.values(job.tool_errors).some(value =>
+      typeof value === 'string' ? true : value.status === 'failed'
+    );
+  }
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -217,6 +224,11 @@ export default function ContractDetailPage() {
                 {job.error && (
                   <p className="mt-2 text-sm text-destructive">
                     Analysis failed: {job.error}
+                  </p>
+                )}
+                {!job.error && job.status === 'completed' && hasFailedToolStatus(job) && (
+                  <p className="mt-2 text-sm text-yellow-700 dark:text-yellow-400">
+                    Partial results: one or more analysis tools failed.
                   </p>
                 )}
               </CardContent>

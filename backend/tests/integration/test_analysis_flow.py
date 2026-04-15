@@ -6,6 +6,7 @@ Completed and that Findings are persisted.
 """
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -65,3 +66,58 @@ async def test_full_flow_mocked(app_instance):
         findings = list(findings_res.scalars().all())
         assert len(findings) == 1
         assert findings[0].severity == Severity.HIGH
+
+
+@pytest.mark.asyncio
+async def test_analysis_persists_auto_resolved_project_files(app_instance):
+    from app.db.session import session_scope
+
+    original_files = {
+        "src/Main.sol": 'pragma solidity ^0.8.20;\nimport "@vendor/Dep.sol";\ncontract Main {}',
+        "deps/Dep.sol": "pragma solidity ^0.8.20;\ncontract Dep {}",
+    }
+    resolved_files = {
+        **original_files,
+        "@vendor/Dep.sol": "pragma solidity ^0.8.20;\ncontract Dep {}",
+    }
+
+    async with session_scope() as session:
+        contract = Contract(
+            name="Main.sol",
+            language="solidity",
+            source=original_files["src/Main.sol"],
+            project_files=json.dumps(original_files),
+        )
+        session.add(contract)
+        await session.flush()
+        job = Job(contract_id=contract.id, tools=["slither"], status=JobStatus.PENDING)
+        session.add(job)
+        await session.flush()
+        job_id = job.id
+        contract_id = contract.id
+
+    with patch(
+        "app.core.compile_check.check_compilation_with_fallback",
+        return_value={
+            "success": True,
+            "missing": [],
+            "errors": [],
+            "auto_resolved": [
+                {
+                    "missing_path": "@vendor/Dep.sol",
+                    "matched_path": "deps/Dep.sol",
+                }
+            ],
+            "ambiguous": [],
+            "files": resolved_files,
+        },
+    ), patch("app.workers.tasks.static_analysis.SlitherAnalyzer") as slither_cls:
+        slither_cls.return_value.analyze_files.return_value = []
+        await run_job_async(job_id, contract_id, ["slither"])
+
+    slither_cls.return_value.analyze_files.assert_called_once_with(resolved_files, entry_files=None)
+
+    async with session_scope() as session:
+        refreshed_contract = await session.get(Contract, contract_id)
+        assert refreshed_contract is not None
+        assert json.loads(refreshed_contract.project_files) == resolved_files

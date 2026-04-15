@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import abc
+import dataclasses
 import logging
 import re
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
+from app.core.sandbox import SandboxResult, format_cmd
 from app.schemas.finding import FindingCreate
 
 log = logging.getLogger(__name__)
@@ -133,6 +137,23 @@ def build_solc_remappings(tmpdir: Path) -> list[str]:
 
 
 _IMPORT_RE = re.compile(r"""import\s+(?:[^"']*?\s+)?["']([^"']+)["']""")
+_CONTRACT_RE = re.compile(r"\b(?:abstract\s+)?contract\s+[A-Za-z_][A-Za-z0-9_]*")
+_LIBRARY_RE = re.compile(r"\blibrary\s+[A-Za-z_][A-Za-z0-9_]*")
+_INTERFACE_RE = re.compile(r"\binterface\s+[A-Za-z_][A-Za-z0-9_]*")
+_OUTPUT_TAIL_LIMIT = 1200
+_NON_ENTRY_DIR_NAMES = {
+    "interface",
+    "interfaces",
+    "lib",
+    "libs",
+    "node_modules",
+    "spec",
+    "specs",
+    "test",
+    "tests",
+    "vendor",
+    "vendors",
+}
 
 
 def auto_alias_by_basename(files: dict[str, str]) -> dict[str, str]:
@@ -172,6 +193,176 @@ def _has_sol_files(path: Path) -> bool:
 
 class AnalyzerError(RuntimeError):
     """Raised when an analyzer encounters an unrecoverable error."""
+
+    def __init__(
+        self,
+        summary: str,
+        *,
+        tool: str | None = None,
+        stage: str | None = None,
+        detail: str | None = None,
+        command: str | None = None,
+        returncode: int | None = None,
+        stdout_tail: str | None = None,
+        stderr_tail: str | None = None,
+        timed_out: bool = False,
+        retryable: bool = False,
+    ) -> None:
+        self.summary = summary
+        self.tool = tool
+        self.stage = stage
+        self.detail = detail
+        self.command = command
+        self.returncode = returncode
+        self.stdout_tail = _trim_output(stdout_tail)
+        self.stderr_tail = _trim_output(stderr_tail)
+        self.timed_out = timed_out
+        self.retryable = retryable
+        super().__init__(self.display_message)
+
+    @property
+    def display_message(self) -> str:
+        if self.detail:
+            return f"{self.summary}: {self.detail}"
+        return self.summary
+
+    def to_status(self) -> dict[str, Any]:
+        return {
+            "status": "failed",
+            "summary": self.summary,
+            "detail": self.detail,
+            "stage": self.stage,
+            "command": self.command,
+            "returncode": self.returncode,
+            "timed_out": self.timed_out,
+            "stdout_tail": self.stdout_tail,
+            "stderr_tail": self.stderr_tail,
+        }
+
+
+@dataclasses.dataclass(frozen=True)
+class ToolStatus:
+    status: str
+    summary: str
+    detail: str | None = None
+    stage: str | None = None
+    command: str | None = None
+    returncode: int | None = None
+    timed_out: bool = False
+    stdout_tail: str | None = None
+    stderr_tail: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "summary": self.summary,
+            "detail": self.detail,
+            "stage": self.stage,
+            "command": self.command,
+            "returncode": self.returncode,
+            "timed_out": self.timed_out,
+            "stdout_tail": _trim_output(self.stdout_tail),
+            "stderr_tail": _trim_output(self.stderr_tail),
+        }
+
+
+def build_tool_success_status(tool: str, summary: str = "Tool completed successfully") -> dict[str, Any]:
+    return ToolStatus(status="ok", summary=summary).to_dict()
+
+
+def build_tool_skipped_status(tool: str, summary: str, detail: str | None = None) -> dict[str, Any]:
+    return ToolStatus(status="skipped", summary=summary, detail=detail, stage="preflight").to_dict()
+
+
+def analyzer_error_from_sandbox(
+    tool: str,
+    stage: str,
+    summary: str,
+    *,
+    cmd: Sequence[str] | None = None,
+    result: SandboxResult | None = None,
+    detail: str | None = None,
+) -> AnalyzerError:
+    stderr_tail = result.stderr if result is not None else None
+    stdout_tail = result.stdout if result is not None else None
+    if detail is None:
+        detail = _preferred_detail(stderr_tail, stdout_tail)
+    return AnalyzerError(
+        summary,
+        tool=tool,
+        stage=stage,
+        detail=detail,
+        command=format_cmd(cmd) if cmd else None,
+        returncode=result.returncode if result is not None else None,
+        stdout_tail=stdout_tail,
+        stderr_tail=stderr_tail,
+        timed_out=result.timed_out if result is not None else False,
+    )
+
+
+def build_unknown_tool_status(tool: str) -> dict[str, Any]:
+    return ToolStatus(
+        status="failed",
+        summary=f"Unsupported analysis tool: {tool}",
+        stage="dispatch",
+    ).to_dict()
+
+
+def _preferred_detail(stderr_tail: str | None, stdout_tail: str | None) -> str | None:
+    for value in (stderr_tail, stdout_tail):
+        trimmed = _trim_output(value)
+        if trimmed:
+            return trimmed
+    return None
+
+
+def _trim_output(value: str | None) -> str | None:
+    if not value:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if len(text) <= _OUTPUT_TAIL_LIMIT:
+        return text
+    return text[-_OUTPUT_TAIL_LIMIT:]
+
+
+def is_interface_only_source(source: str) -> bool:
+    if _CONTRACT_RE.search(source) or _LIBRARY_RE.search(source):
+        return False
+    return bool(_INTERFACE_RE.search(source))
+
+
+def is_non_entry_solidity_path(path: str) -> bool:
+    parts = [part.lower() for part in Path(path).parts]
+    return any(part in _NON_ENTRY_DIR_NAMES for part in parts)
+
+
+def choose_fuzz_entry_file(
+    files: dict[str, str],
+    entry_files: list[str] | None = None,
+) -> str | None:
+    ordered_candidates = entry_files if entry_files else sorted(files.keys())
+    candidates = [
+        path
+        for path in ordered_candidates
+        if path.endswith(".sol") and not path.startswith("@") and path in files
+    ]
+    if not candidates:
+        return None
+
+    preferred = [
+        path for path in candidates
+        if not is_non_entry_solidity_path(path) and not is_interface_only_source(files[path])
+    ]
+    if preferred:
+        return preferred[0]
+
+    fallback = [path for path in candidates if not is_interface_only_source(files[path])]
+    if fallback:
+        return fallback[0]
+
+    return None
 
 
 class BaseAnalyzer(abc.ABC):

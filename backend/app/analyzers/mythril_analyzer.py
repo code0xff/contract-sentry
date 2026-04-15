@@ -7,9 +7,15 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from app.analyzers.base import AnalyzerError, BaseAnalyzer, build_solc_remappings, resolve_npm_deps
+from app.analyzers.base import (
+    AnalyzerError,
+    BaseAnalyzer,
+    analyzer_error_from_sandbox,
+    build_solc_remappings,
+    resolve_npm_deps,
+)
 from app.config import get_settings
-from app.core.sandbox import SandboxError, run_sandboxed
+from app.core.sandbox import SandboxError, format_cmd, run_sandboxed
 from app.schemas.enums import Severity, ToolName, VulnerabilityType
 from app.schemas.finding import FindingCreate
 
@@ -79,15 +85,36 @@ class MythrilAnalyzer(BaseAnalyzer):
             try:
                 result = run_sandboxed(cmd, timeout=self.timeout, cwd=str(tmp))
             except SandboxError as exc:
-                raise AnalyzerError(f"mythril not available: {exc}") from exc
+                raise AnalyzerError(
+                    "mythril not available",
+                    tool=self.tool_name,
+                    stage="spawn",
+                    detail=str(exc),
+                    command=format_cmd(cmd),
+                ) from exc
 
             if result.timed_out:
-                raise AnalyzerError(f"mythril timed out after {self.timeout}s")
+                raise analyzer_error_from_sandbox(
+                    self.tool_name,
+                    "execute",
+                    f"mythril timed out after {self.timeout}s",
+                    cmd=cmd,
+                    result=result,
+                )
 
             # Mythril exits 0 even when solc compilation fails — detect via stderr
             stderr = result.stderr or ""
             if any(kw in stderr.lower() for kw in ("fatal error", "file not found", "cannot find", "solc experienced")):
-                raise AnalyzerError(f"mythril compilation failed: {stderr[:400]}")
+                raise AnalyzerError(
+                    "mythril compilation failed",
+                    tool=self.tool_name,
+                    stage="compile",
+                    detail=stderr[:400],
+                    command=format_cmd(cmd),
+                    returncode=result.returncode,
+                    stdout_tail=result.stdout,
+                    stderr_tail=result.stderr,
+                )
 
             stdout = result.stdout.strip()
             if not stdout:
@@ -96,7 +123,16 @@ class MythrilAnalyzer(BaseAnalyzer):
             try:
                 data = json.loads(stdout)
             except json.JSONDecodeError as exc:
-                raise AnalyzerError(f"mythril emitted invalid JSON: {exc}") from exc
+                raise AnalyzerError(
+                    "mythril emitted invalid JSON",
+                    tool=self.tool_name,
+                    stage="parse",
+                    detail=str(exc),
+                    command=format_cmd(cmd),
+                    returncode=result.returncode,
+                    stdout_tail=result.stdout,
+                    stderr_tail=result.stderr,
+                ) from exc
 
             return self._normalize(data)
 
@@ -111,7 +147,7 @@ class MythrilAnalyzer(BaseAnalyzer):
             try:
                 remap_json = json.dumps({"remappings": [SOLC_REMAPPINGS]})
                 result = run_sandboxed(
-                    [
+                    cmd := [
                         self.binary, "analyze", str(src_path),
                         "-o", "json",
                         "--solc-json", remap_json,
@@ -119,10 +155,35 @@ class MythrilAnalyzer(BaseAnalyzer):
                     timeout=self.timeout,
                 )
             except SandboxError as exc:
-                raise AnalyzerError(f"mythril not available: {exc}") from exc
+                raise AnalyzerError(
+                    "mythril not available",
+                    tool=self.tool_name,
+                    stage="spawn",
+                    detail=str(exc),
+                    command=format_cmd(cmd),
+                ) from exc
 
             if result.timed_out:
-                raise AnalyzerError(f"mythril timed out after {self.timeout}s")
+                raise analyzer_error_from_sandbox(
+                    self.tool_name,
+                    "execute",
+                    f"mythril timed out after {self.timeout}s",
+                    cmd=cmd,
+                    result=result,
+                )
+
+            stderr = result.stderr or ""
+            if any(kw in stderr.lower() for kw in ("fatal error", "file not found", "cannot find", "solc experienced")):
+                raise AnalyzerError(
+                    "mythril compilation failed",
+                    tool=self.tool_name,
+                    stage="compile",
+                    detail=stderr[:400],
+                    command=format_cmd(cmd),
+                    returncode=result.returncode,
+                    stdout_tail=result.stdout,
+                    stderr_tail=result.stderr,
+                )
 
             stdout = result.stdout.strip()
             if not stdout:
@@ -131,7 +192,16 @@ class MythrilAnalyzer(BaseAnalyzer):
             try:
                 data = json.loads(stdout)
             except json.JSONDecodeError as exc:
-                raise AnalyzerError(f"mythril emitted invalid JSON: {exc}") from exc
+                raise AnalyzerError(
+                    "mythril emitted invalid JSON",
+                    tool=self.tool_name,
+                    stage="parse",
+                    detail=str(exc),
+                    command=format_cmd(cmd),
+                    returncode=result.returncode,
+                    stdout_tail=result.stdout,
+                    stderr_tail=result.stderr,
+                ) from exc
 
             return self._normalize(data)
 

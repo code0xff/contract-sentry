@@ -13,9 +13,15 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from app.analyzers.base import AnalyzerError, BaseAnalyzer, build_solc_remappings, resolve_npm_deps
+from app.analyzers.base import (
+    AnalyzerError,
+    BaseAnalyzer,
+    analyzer_error_from_sandbox,
+    build_solc_remappings,
+    resolve_npm_deps,
+)
 from app.config import get_settings
-from app.core.sandbox import SandboxError, run_sandboxed
+from app.core.sandbox import SandboxError, format_cmd, run_sandboxed
 from app.schemas.enums import Severity, ToolName, VulnerabilityType
 from app.schemas.finding import FindingCreate
 
@@ -141,24 +147,60 @@ class SlitherAnalyzer(BaseAnalyzer):
             try:
                 result = run_sandboxed(cmd, timeout=self.timeout, cwd=str(tmp))
             except SandboxError as exc:
-                raise AnalyzerError(f"slither not available: {exc}") from exc
+                raise AnalyzerError(
+                    "slither not available",
+                    tool=self.tool_name,
+                    stage="spawn",
+                    detail=str(exc),
+                    command=format_cmd(cmd),
+                ) from exc
 
             if result.timed_out:
-                raise AnalyzerError(f"slither timed out after {self.timeout}s")
+                raise analyzer_error_from_sandbox(
+                    self.tool_name,
+                    "execute",
+                    f"slither timed out after {self.timeout}s",
+                    cmd=cmd,
+                    result=result,
+                )
 
             if not result.stdout.strip():
                 if result.returncode != 0:
-                    raise AnalyzerError(f"slither failed: {result.stderr[:500]}")
+                    raise analyzer_error_from_sandbox(
+                        self.tool_name,
+                        "execute",
+                        "slither failed",
+                        cmd=cmd,
+                        result=result,
+                    )
                 return []
 
             try:
                 data = json.loads(result.stdout)
             except json.JSONDecodeError as exc:
-                raise AnalyzerError(f"slither emitted invalid JSON: {exc}") from exc
+                raise AnalyzerError(
+                    "slither emitted invalid JSON",
+                    tool=self.tool_name,
+                    stage="parse",
+                    detail=str(exc),
+                    command=format_cmd(cmd),
+                    returncode=result.returncode,
+                    stdout_tail=result.stdout,
+                    stderr_tail=result.stderr,
+                ) from exc
 
             if not data.get("success", True):
                 err = data.get("error") or result.stderr or "compilation failed"
-                raise AnalyzerError(f"slither compilation failed: {err[:400]}")
+                raise AnalyzerError(
+                    "slither compilation failed",
+                    tool=self.tool_name,
+                    stage="compile",
+                    detail=err[:400],
+                    command=format_cmd(cmd),
+                    returncode=result.returncode,
+                    stdout_tail=result.stdout,
+                    stderr_tail=result.stderr,
+                )
 
             # user_files = non-@scope keys (the files actually authored by user)
             user_file_set = {p for p in files if p.endswith(".sol") and not p.startswith("@")}
@@ -176,7 +218,7 @@ class SlitherAnalyzer(BaseAnalyzer):
 
             try:
                 result = run_sandboxed(
-                    [
+                    cmd := [
                         self.binary, str(src_path),
                         "--json", "-",
                         "--solc-remaps", SOLC_REMAPPINGS,
@@ -184,25 +226,61 @@ class SlitherAnalyzer(BaseAnalyzer):
                     timeout=self.timeout,
                 )
             except SandboxError as exc:
-                raise AnalyzerError(f"slither not available: {exc}") from exc
+                raise AnalyzerError(
+                    "slither not available",
+                    tool=self.tool_name,
+                    stage="spawn",
+                    detail=str(exc),
+                    command=format_cmd(cmd),
+                ) from exc
 
             if result.timed_out:
-                raise AnalyzerError(f"slither timed out after {self.timeout}s")
+                raise analyzer_error_from_sandbox(
+                    self.tool_name,
+                    "execute",
+                    f"slither timed out after {self.timeout}s",
+                    cmd=cmd,
+                    result=result,
+                )
 
             if not result.stdout.strip():
                 # slither returns non-zero on findings; inspect stderr
                 if result.returncode != 0:
-                    raise AnalyzerError(f"slither failed: {result.stderr[:500]}")
+                    raise analyzer_error_from_sandbox(
+                        self.tool_name,
+                        "execute",
+                        "slither failed",
+                        cmd=cmd,
+                        result=result,
+                    )
                 return []
 
             try:
                 data = json.loads(result.stdout)
             except json.JSONDecodeError as exc:
-                raise AnalyzerError(f"slither emitted invalid JSON: {exc}") from exc
+                raise AnalyzerError(
+                    "slither emitted invalid JSON",
+                    tool=self.tool_name,
+                    stage="parse",
+                    detail=str(exc),
+                    command=format_cmd(cmd),
+                    returncode=result.returncode,
+                    stdout_tail=result.stdout,
+                    stderr_tail=result.stderr,
+                ) from exc
 
             if not data.get("success", True):
                 err = data.get("error") or result.stderr or "compilation failed"
-                raise AnalyzerError(f"slither compilation failed: {err[:400]}")
+                raise AnalyzerError(
+                    "slither compilation failed",
+                    tool=self.tool_name,
+                    stage="compile",
+                    detail=err[:400],
+                    command=format_cmd(cmd),
+                    returncode=result.returncode,
+                    stdout_tail=result.stdout,
+                    stderr_tail=result.stderr,
+                )
 
             return self._normalize(data)
 

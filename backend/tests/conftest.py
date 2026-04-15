@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
+import uuid
 from collections.abc import AsyncIterator, Iterator
 
 import pytest
@@ -11,9 +12,9 @@ import pytest_asyncio
 
 _db_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _db_file.close()
-os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_db_file.name}")
-os.environ.setdefault("CELERY_BROKER_URL", "memory://")
-os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
+os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_db_file.name}"
+os.environ["CELERY_BROKER_URL"] = "memory://"
+os.environ["CELERY_RESULT_BACKEND"] = "cache+memory://"
 
 
 @pytest.fixture(scope="session")
@@ -40,3 +41,15 @@ async def client(app_instance) -> AsyncIterator:
     transport = ASGITransport(app=app_instance)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest_asyncio.fixture
+async def auth_headers(client) -> dict[str, str]:
+    email = f"test-{uuid.uuid4()}@example.com"
+    password = "password123"
+    register = await client.post("/api/v1/auth/register", json={"email": email, "password": password})
+    assert register.status_code == 201
+    login = await client.post("/api/v1/auth/login", json={"email": email, "password": password})
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}

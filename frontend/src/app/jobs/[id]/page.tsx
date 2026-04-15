@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { generateAiReport, getCampaign, getFindings, getJob, getJobReport, triggerCampaign } from '@/lib/api';
-import type { AttackCampaign, CampaignStatus, Finding, Job } from '@/types';
+import type { AttackCampaign, CampaignStatus, Finding, Job, ToolExecutionStatus } from '@/types';
 import { PageError, PageLoading } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,6 +46,29 @@ const STATUS_DOT: Record<string, string> = {
   failed:    'bg-red-500',
   cancelled: 'bg-gray-400',
 };
+
+const TOOL_STATUS_BADGE: Record<'ok' | 'failed' | 'skipped', string> = {
+  ok: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  skipped: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400',
+};
+
+function normalizeToolStatus(value: string | ToolExecutionStatus) {
+  if (typeof value === 'string') {
+    return {
+      status: 'failed' as const,
+      summary: value,
+      detail: null,
+      stage: null,
+      command: null,
+      returncode: null,
+      timed_out: false,
+      stdout_tail: null,
+      stderr_tail: null,
+    };
+  }
+  return value;
+}
 
 function SeverityBadge({ severity }: { severity: string }) {
   return (
@@ -155,6 +178,14 @@ export default function JobPage() {
   if (!job)    return <PageError error="Job not found" />;
 
   const isActive = job.status === 'pending' || job.status === 'running';
+  const toolStatuses = job.tool_errors
+    ? Object.entries(job.tool_errors).map(([tool, value]) => ({ tool, status: normalizeToolStatus(value) }))
+    : [];
+  const failedTools = toolStatuses.filter(({ status }) => status.status === 'failed');
+  const skippedTools = toolStatuses.filter(({ status }) => status.status === 'skipped');
+  const hasFailedTools = failedTools.length > 0;
+  const hasSkippedTools = skippedTools.length > 0;
+  const allToolsFailed = toolStatuses.length > 0 && failedTools.length === toolStatuses.length;
 
   return (
     <div>
@@ -221,8 +252,65 @@ export default function JobPage() {
               Analysis in progress… page auto-refreshes every 3s.
             </div>
           )}
+
+          {!isActive && hasFailedTools && (
+            <div className={cn(
+              "mt-4 rounded-md border px-4 py-3 text-sm",
+              job.status === 'failed'
+                ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400'
+                : 'border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-400'
+            )}>
+              {job.status === 'failed'
+                ? 'All selected analysis tools failed.'
+                : 'Some analysis tools failed. Findings and reports may be incomplete.'}
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {toolStatuses.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Tool Execution</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {toolStatuses.map(({ tool, status }) => (
+              <div key={tool} className="rounded-md border p-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-semibold">{tool}</span>
+                    <span className={cn('rounded px-2 py-0.5 text-xs font-semibold', TOOL_STATUS_BADGE[status.status])}>
+                      {status.status}
+                    </span>
+                  </div>
+                  {status.timed_out && (
+                    <span className="text-xs text-destructive">timed out</span>
+                  )}
+                </div>
+                <p className="text-sm">{status.summary}</p>
+                {status.detail && (
+                  <p className="mt-1 whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">{status.detail}</p>
+                )}
+                <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+                  {status.stage && <div>Stage: {status.stage}</div>}
+                  {status.returncode !== null && <div>Return code: {status.returncode}</div>}
+                  {status.command && (
+                    <div className="md:col-span-2 break-all">
+                      Command: <code>{status.command}</code>
+                    </div>
+                  )}
+                  {status.stderr_tail && (
+                    <div className="md:col-span-2">
+                      <p className="mb-1">stderr</p>
+                      <pre className="overflow-x-auto rounded bg-muted/50 p-2 whitespace-pre-wrap">{status.stderr_tail}</pre>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {job.status === 'completed' && (
         <>
@@ -250,22 +338,7 @@ export default function JobPage() {
             </div>
           </div>
 
-          {job.tool_errors && Object.keys(job.tool_errors).length > 0 && (
-            <div className="mb-4 rounded-md border border-yellow-300 bg-yellow-50 px-4 py-3 dark:border-yellow-800 dark:bg-yellow-950/30">
-              <p className="mb-1 text-sm font-semibold text-yellow-800 dark:text-yellow-400">
-                Some analysis tools failed — results may be incomplete
-              </p>
-              <ul className="space-y-1">
-                {Object.entries(job.tool_errors).map(([tool, msg]) => (
-                  <li key={tool} className="text-xs text-yellow-700 dark:text-yellow-500">
-                    <span className="font-mono font-bold">{tool}</span>: {msg}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {findings.length === 0 && (
+          {findings.length === 0 && !hasFailedTools && !hasSkippedTools && (
             <Card className="mb-4">
               <CardContent className="py-8 text-center">
                 <p className="font-medium text-green-600 dark:text-green-400">

@@ -12,6 +12,7 @@ import pytest
 
 from app.analyzers.base import AnalyzerError
 from app.analyzers.echidna_analyzer import EchidnaAnalyzer
+from app.analyzers.medusa_analyzer import MedusaAnalyzer
 from app.analyzers.mythril_analyzer import MythrilAnalyzer
 from app.analyzers.slither_analyzer import SlitherAnalyzer
 from app.core.sandbox import SandboxError, SandboxResult
@@ -189,8 +190,11 @@ class TestSlitherAnalyzer:
             "app.analyzers.slither_analyzer.run_sandboxed",
             side_effect=SandboxError("executable not found"),
         ):
-            with pytest.raises(AnalyzerError, match="not available"):
+            with pytest.raises(AnalyzerError, match="not available") as exc_info:
                 SlitherAnalyzer().analyze("contract C {}")
+        err = exc_info.value
+        assert err.stage == "spawn"
+        assert err.command is not None
 
     def test_invalid_json_raises_analyzer_error(self) -> None:
         with patch(
@@ -289,8 +293,10 @@ class TestMythrilAnalyzer:
         with patch(
             "app.analyzers.mythril_analyzer.run_sandboxed", return_value=_timeout()
         ):
-            with pytest.raises(AnalyzerError, match="timed out"):
+            with pytest.raises(AnalyzerError, match="timed out") as exc_info:
                 MythrilAnalyzer().analyze("contract C {}")
+        assert exc_info.value.timed_out is True
+        assert exc_info.value.stage == "execute"
 
     def test_binary_not_found_raises_analyzer_error(self) -> None:
         with patch(
@@ -348,6 +354,102 @@ class TestEchidnaAnalyzer:
 
         assert len(findings) == 2
 
+    def test_analyze_files_prefers_user_owned_entry_file(self) -> None:
+        output = "All tests passed"
+        with patch(
+            "app.analyzers.echidna_analyzer.run_sandboxed", return_value=_ok(output)
+        ) as run:
+            EchidnaAnalyzer().analyze_files(
+                {
+                    "@universal/interfaces/ISemver.sol": "interface ISemver {}",
+                    "src/Main.sol": "contract Main {}",
+                }
+            )
+
+        cmd = run.call_args.args[0]
+        assert cmd[1].endswith("/src/Main.sol")
+
+    def test_analyze_files_skips_interface_and_dependency_paths(self) -> None:
+        output = "All tests passed"
+        captured: dict[str, str] = {}
+
+        def fake_run(cmd, timeout, cwd):
+            captured["cmd"] = cmd
+            config_arg = cmd[cmd.index("--crytic-args") + 1]
+            config_path = config_arg.removeprefix("--config-file ")
+            with open(config_path, encoding="utf-8") as fh:
+                captured["config"] = fh.read()
+            return _ok(output)
+
+        with patch(
+            "app.analyzers.echidna_analyzer.run_sandboxed", side_effect=fake_run
+        ):
+            EchidnaAnalyzer().analyze_files(
+                {
+                    "universal/interfaces/ISemver.sol": "interface ISemver {}",
+                    "lib/Helper.sol": "contract Helper {}",
+                    "src/Main.sol": "contract Main { function echidna_ok() public returns (bool) { return true; } }",
+                },
+                entry_files=[
+                    "universal/interfaces/ISemver.sol",
+                    "lib/Helper.sol",
+                    "src/Main.sol",
+                ],
+            )
+
+        cmd = captured["cmd"]
+        assert cmd[1].endswith("/src/Main.sol")
+        assert "--crytic-args" in cmd
+        assert "@openzeppelin/contracts=" in captured["config"]
+        assert "--allow-paths" in captured["config"]
+
+    def test_analyze_files_raises_when_only_interface_targets_exist(self) -> None:
+        with pytest.raises(AnalyzerError, match="No suitable fuzz target found") as exc_info:
+            EchidnaAnalyzer().analyze_files(
+                {
+                    "universal/interfaces/ISemver.sol": "interface ISemver {}",
+                },
+                entry_files=["universal/interfaces/ISemver.sol"],
+            )
+        assert exc_info.value.stage == "preflight"
+
+    def test_no_tests_found_raises_targeted_error(self) -> None:
+        result = SandboxResult(
+            returncode=1,
+            stdout="",
+            stderr="echidna: No tests found in ABI. If you are using assert(), use --test-mode assertion",
+            timed_out=False,
+        )
+        with patch(
+            "app.analyzers.echidna_analyzer.run_sandboxed", return_value=result
+        ):
+            with pytest.raises(AnalyzerError, match="no fuzzable properties") as exc_info:
+                EchidnaAnalyzer().analyze_files(
+                    {
+                        "src/Main.sol": "contract Main {}",
+                    },
+                    entry_files=["src/Main.sol"],
+                )
+        assert "src/Main.sol" in (exc_info.value.detail or "")
+
+    def test_missing_imports_raise_compile_error(self) -> None:
+        result = SandboxResult(
+            returncode=1,
+            stdout="",
+            stderr='Error: Source "@openzeppelin/contracts/utils/ReentrancyGuard.sol" not found: File not found.',
+            timed_out=False,
+        )
+        with patch(
+            "app.analyzers.echidna_analyzer.run_sandboxed", return_value=result
+        ):
+            with pytest.raises(AnalyzerError, match="compilation failed") as exc_info:
+                EchidnaAnalyzer().analyze_files(
+                    {"src/Main.sol": 'import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";\ncontract Main {}'},
+                    entry_files=["src/Main.sol"],
+                )
+        assert exc_info.value.stage == "compile"
+        assert exc_info.value.command is not None
+
     def test_no_violations_returns_empty(self) -> None:
         output = "prop_a: passed\nprop_b: passed"
         with patch(
@@ -367,8 +469,9 @@ class TestEchidnaAnalyzer:
             "app.analyzers.echidna_analyzer.run_sandboxed",
             side_effect=SandboxError("not found"),
         ):
-            with pytest.raises(AnalyzerError, match="not available"):
+            with pytest.raises(AnalyzerError, match="not available") as exc_info:
                 EchidnaAnalyzer().analyze("contract C {}")
+        assert exc_info.value.stage == "spawn"
 
     def test_confidence_fixed_at_0_85(self) -> None:
         output = "echidna_prop: failed"
@@ -377,3 +480,37 @@ class TestEchidnaAnalyzer:
         ):
             findings = EchidnaAnalyzer().analyze("contract C {}")
         assert findings[0].confidence == pytest.approx(0.85)
+
+
+class TestMedusaAnalyzer:
+    def test_analyze_files_skips_interface_and_dependency_paths(self) -> None:
+        output = "No violations"
+        with patch(
+            "app.analyzers.medusa_analyzer.run_sandboxed", return_value=_ok(output)
+        ) as run:
+            MedusaAnalyzer().analyze_files(
+                {
+                    "universal/interfaces/ISemver.sol": "interface ISemver {}",
+                    "lib/Helper.sol": "contract Helper {}",
+                    "src/Main.sol": "contract Main {}",
+                },
+                entry_files=[
+                    "universal/interfaces/ISemver.sol",
+                    "lib/Helper.sol",
+                    "src/Main.sol",
+                ],
+            )
+
+        cmd = run.call_args.args[0]
+        assert cmd[2] == "--target"
+        assert cmd[3].endswith("/src/Main.sol")
+
+    def test_analyze_files_raises_when_only_interface_targets_exist(self) -> None:
+        with pytest.raises(AnalyzerError, match="No suitable fuzz target found") as exc_info:
+            MedusaAnalyzer().analyze_files(
+                {
+                    "interfaces/ITest.sol": "interface ITest {}",
+                },
+                entry_files=["interfaces/ITest.sol"],
+            )
+        assert exc_info.value.stage == "preflight"
