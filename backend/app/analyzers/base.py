@@ -56,12 +56,21 @@ def resolve_npm_deps(tmpdir: Path, files: dict[str, str]) -> None:
     if not packages:
         return
 
-    to_install = [
-        pkg for pkg in packages
-        if not (_GLOBAL_NODE_MODULES / pkg).exists()
-        and not (tmpdir / "node_modules" / pkg).exists()
-        and not (tmpdir / pkg).exists()  # user uploaded the package directly
-    ]
+    def _already_available(pkg: str) -> bool:
+        if (_GLOBAL_NODE_MODULES / pkg).exists():
+            return True
+        if (tmpdir / "node_modules" / pkg).exists():
+            return True
+        if (tmpdir / pkg).exists():
+            return True
+        # Files uploaded directly with the scope path (e.g. "universal/interfaces/ISemver.sol"
+        # satisfies "@universal/interfaces" — check both with and without leading "@")
+        bare = pkg.lstrip("@")
+        if any(k.startswith(bare + "/") or k.startswith(pkg + "/") for k in files):
+            return True
+        return False
+
+    to_install = [pkg for pkg in packages if not _already_available(pkg)]
 
     if not to_install:
         return
