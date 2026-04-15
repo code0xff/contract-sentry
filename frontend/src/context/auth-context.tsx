@@ -5,6 +5,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 export interface AuthContextValue {
   token: string | null;
   isAuthenticated: boolean;
+  hydrated: boolean;
   login(token: string): void;
   logout(): void;
 }
@@ -13,11 +14,13 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   // Hydrate from localStorage after mount (safe for SSR)
   useEffect(() => {
     const stored = localStorage.getItem('token');
     if (stored) setToken(stored);
+    setHydrated(true);
   }, []);
 
   const login = (newToken: string) => {
@@ -32,7 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, isAuthenticated: !!token, login, logout }}>
+    <AuthContext.Provider value={{ token, isAuthenticated: !!token, hydrated, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
