@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Trash2 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
-import { analyzeContract, getContract, listContractJobs } from '@/lib/api';
+import { analyzeContract, deleteContract, deleteJob, getContract, listContractJobs } from '@/lib/api';
 import type { Contract, Job } from '@/types';
+import { ActionAlert, PageError, PageLoading } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -47,14 +49,16 @@ export default function ContractDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [selectedTools, setSelectedTools] = useState<string[]>(['slither', 'mythril']);
+  const [deletingJob, setDeletingJob] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const [c, js] = await Promise.all([getContract(id), listContractJobs(id)]);
       setContract(c); setJobs(js);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      setError(e instanceof Error ? e.message : 'Failed to load contract');
     } finally {
       setLoading(false);
     }
@@ -72,29 +76,67 @@ export default function ContractDetailPage() {
   const toggleTool = (t: string) =>
     setSelectedTools(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
 
+  async function handleDeleteContract() {
+    if (!contract) return;
+    if (!confirm(`Delete "${contract.name}" and all its analyses? This cannot be undone.`)) return;
+    try {
+      await deleteContract(contract.id);
+      router.push('/contracts');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Delete failed');
+    }
+  }
+
+  async function handleDeleteJob(e: React.MouseEvent, jobId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('Delete this analysis job and all its findings? This cannot be undone.')) return;
+    setDeletingJob(jobId);
+    try {
+      await deleteJob(jobId);
+      setJobs(prev => prev.filter(j => j.id !== jobId));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setDeletingJob(null);
+    }
+  }
+
   async function startAnalysis() {
     if (!contract || selectedTools.length === 0) return;
     setAnalyzing(true);
+    setAnalyzeError(null);
     try {
       const job = await analyzeContract(contract.id, selectedTools);
       router.push(`/jobs/${job.id}`);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to start analysis');
+      setAnalyzeError(e instanceof Error ? e.message : 'Failed to start analysis');
       setAnalyzing(false);
     }
   }
 
-  if (loading) return <p className="text-muted-foreground">Loading…</p>;
-  if (error)   return <p className="text-destructive">Error: {error}</p>;
-  if (!contract) return <p>Contract not found</p>;
+  if (loading) return <PageLoading />;
+  if (error)   return <PageError error={error} onRetry={() => { setLoading(true); setError(null); load(); }} />;
+  if (!contract) return <PageError error="Contract not found" />;
 
   const activeJob = jobs.find(j => j.status === 'pending' || j.status === 'running');
 
   return (
     <div>
-      <Button variant="ghost" size="sm" className="-ml-2 mb-4" onClick={() => router.push('/contracts')}>
-        ← Contracts
-      </Button>
+      <div className="mb-4 flex items-center justify-between">
+        <Button variant="ghost" size="sm" className="-ml-2" onClick={() => router.push('/contracts')}>
+          ← Contracts
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={handleDeleteContract}
+          title="Delete contract"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
 
       <Card className="mb-6">
         <CardContent className="pt-6">
@@ -131,6 +173,15 @@ export default function ContractDetailPage() {
               </Button>
             </div>
           </div>
+          {analyzeError && (
+            <div className="mt-4">
+              <ActionAlert
+                message={analyzeError}
+                type="error"
+                onClose={() => setAnalyzeError(null)}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -146,7 +197,7 @@ export default function ContractDetailPage() {
 
       <div className="flex flex-col gap-2">
         {jobs.map(job => (
-          <Link key={job.id} href={`/jobs/${job.id}`} className="block no-underline">
+          <Link key={job.id} href={`/jobs/${job.id}`} className="group block no-underline">
             <Card className="cursor-pointer transition-colors hover:bg-accent/50">
               <CardContent className="px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -154,14 +205,28 @@ export default function ContractDetailPage() {
                     <StatusBadge status={job.status} />
                     <span className="text-sm text-muted-foreground">{job.tools.join(', ')}</span>
                   </div>
-                  <div className="text-right text-xs text-muted-foreground">
-                    {job.status === 'running' && (
-                      <span className="mr-3 font-medium text-blue-500">{job.progress}%</span>
-                    )}
-                    {new Date(job.created_at).toLocaleString()}
+                  <div className="flex items-center gap-3">
+                    <div className="text-right text-xs text-muted-foreground">
+                      {job.status === 'running' && (
+                        <span className="mr-3 font-medium text-blue-500">{job.progress}%</span>
+                      )}
+                      {new Date(job.created_at).toLocaleString()}
+                    </div>
+                    <button
+                      onClick={e => handleDeleteJob(e, job.id)}
+                      disabled={deletingJob === job.id}
+                      className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 disabled:opacity-40"
+                      title="Delete job"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
-                {job.error && <p className="mt-2 text-sm text-destructive">{job.error}</p>}
+                {job.error && (
+                  <p className="mt-2 text-sm text-destructive">
+                    Analysis failed: {job.error}
+                  </p>
+                )}
               </CardContent>
             </Card>
           </Link>

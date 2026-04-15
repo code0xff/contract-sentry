@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getReport, getReportMarkdown } from '@/lib/api';
 import type { Report } from '@/types';
+import { PageError, PageLoading } from '@/components/page-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -42,9 +43,9 @@ export default function ReportPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <p className="text-muted-foreground">Loading report…</p>;
-  if (error)   return <p className="text-destructive">Error: {error}</p>;
-  if (!report) return <p>Report not found</p>;
+  if (loading) return <PageLoading message="Loading report…" />;
+  if (error)   return <PageError error={error} onRetry={() => { setLoading(true); setError(null); Promise.all([getReport(id), getReportMarkdown(id)]).then(([r, md]) => { setReport(r); setMarkdown(md); }).catch(err => setError(err instanceof Error ? err.message : 'Failed to load')).finally(() => setLoading(false)); }} />;
+  if (!report) return <PageError error="Report not found" />;
 
   const { summary } = report;
 

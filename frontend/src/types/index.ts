@@ -32,6 +32,7 @@ export interface Job {
   tools: string[];
   progress: number;
   error: string | null;
+  tool_errors: Record<string, string> | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
